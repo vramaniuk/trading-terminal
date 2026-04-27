@@ -239,7 +239,6 @@ export function useAnalysisData(): AnalysisData {
   }, [loadFunding]);
 
   const loadMacro = useCallback(() => {
-    dzengiTickerCache = null;
     safeFetch(() => fetchDzengiMacro("US500."), mountedRef, setSpx, {
       ...defaultMacro,
       loading: false,
