@@ -86,9 +86,10 @@ router.get('/open-interest/:symbol', async (req, res) => {
     ]);
     
     const oiCcy = Number(oiRes.data.openInterest);
+    const oiUsd = Number(oiRes.data.openInterestValue || oiRes.data.notionalValue || 0);
     const history = historyRes.data.slice(-48).map(row => Number(row.sumOpenInterestValue));
     
-    res.json({ oiUsd: oiCcy, oiCcy, history });
+    res.json({ oiUsd, oiCcy, history });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch OI' });
   }
