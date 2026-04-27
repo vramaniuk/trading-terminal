@@ -150,4 +150,195 @@ router.get('/coingecko-markets', async (req, res) => {
   }
 });
 
+// CoinMetrics - Active addresses and transaction counts
+router.get('/coinmetrics/:asset', async (req, res) => {
+  try {
+    const { asset } = req.params;
+    const { metrics = 'active_addresses,tx_count', start, end } = req.query;
+    const url = `https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=${asset}&metrics=${metrics}${start ? `&start=${start}` : ''}${end ? `&end=${end}` : ''}`;
+    const response = await axios.get(url);
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch coinmetrics data' });
+  }
+});
+
+// Etherscan - ETH whale wallet activity (v2 API)
+router.get('/etherscan/address/:address', async (req, res) => {
+  try {
+    const { address } = req.params;
+    const apiKey = process.env.ETHERSCAN_API_KEY || '';
+    const url = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=balance&address=${address}&tag=latest&apikey=${apiKey}`;
+    const response = await axios.get(url);
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch etherscan data' });
+  }
+});
+
+// Etherscan - ETH transaction count for address (v2 API)
+router.get('/etherscan/txcount/:address', async (req, res) => {
+  try {
+    const { address } = req.params;
+    const apiKey = process.env.ETHERSCAN_API_KEY || '';
+    const url = `https://api.etherscan.io/v2/api?chainid=1&module=proxy&action=eth_getTransactionCount&address=${address}&tag=latest&apikey=${apiKey}`;
+    const response = await axios.get(url);
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch etherscan tx count' });
+  }
+});
+
+// Etherscan - ETH large transactions (whale tracking)
+router.get('/eth/large-transactions', async (req, res) => {
+  try {
+    const { min_value = 1, limit = 50 } = req.query;
+    const apiKey = process.env.ETHERSCAN_API_KEY || '';
+    const minValueWei = BigInt(min_value) * BigInt(10 ** 18); // Convert ETH to Wei
+    console.log(`Fetching ETH transactions with min_value=${min_value}, limit=${limit}`);
+    
+    // Get latest block number first
+    const blockUrl = `https://api.etherscan.io/v2/api?chainid=1&module=proxy&action=eth_blockNumber&apikey=${apiKey}`;
+    const blockRes = await axios.get(blockUrl);
+    const latestBlock = parseInt(blockRes.data.result, 16);
+    console.log(`Latest block: ${latestBlock}`);
+    
+    const transactions = [];
+    let totalTxCount = 0;
+    let whaleTxCount = 0;
+    const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+    // ETH produces ~7200 blocks per day (12s block time)
+    const blocksToCheck = Math.min(7200, Math.ceil(limit / 5));
+    
+    for (let i = 0; i < blocksToCheck; i++) {
+      const blockNumber = latestBlock - i;
+      // Get block with transactions
+      const blockUrl = `https://api.etherscan.io/v2/api?chainid=1&module=proxy&action=eth_getBlockByNumber&tag=0x${blockNumber.toString(16)}&boolean=true&apikey=${apiKey}`;
+      const blockRes = await axios.get(blockUrl);
+      const block = blockRes.data.result;
+      
+      if (block && block.transactions) {
+        const blockTime = Number(block.timestamp) * 1000;
+        if (blockTime < twentyFourHoursAgo) break;
+        
+        totalTxCount += block.transactions.length;
+        
+        for (const tx of block.transactions) {
+          const value = BigInt(tx.value || '0');
+          if (value >= minValueWei) {
+            whaleTxCount++;
+            transactions.push({
+              hash: tx.hash,
+              time: new Date(blockTime).toISOString(),
+              sender: tx.from,
+              recipient: tx.to || 'Contract Creation',
+              amount: Number(value) / 1e18, // Convert Wei to ETH
+              gasUsed: Number(tx.gas),
+              gasPrice: Number(tx.gasPrice) / 1e9, // Convert to Gwei
+            });
+          }
+          
+          if (transactions.length >= limit) break;
+        }
+      }
+      
+      if (transactions.length >= limit) break;
+    }
+    
+    const whalePercentage = totalTxCount > 0 ? (whaleTxCount / totalTxCount) * 100 : 0;
+    console.log(`Total transactions: ${totalTxCount}, Whale transactions: ${whaleTxCount}, Whale percentage: ${whalePercentage.toFixed(2)}%`);
+    
+    res.json({ 
+      data: { 
+        transactions,
+        stats: {
+          totalTransactions: totalTxCount,
+          whaleTransactions: whaleTxCount,
+          whalePercentage: whalePercentage.toFixed(2)
+        }
+      } 
+    });
+  } catch (error) {
+    console.error('Error fetching ETH large transactions:', error);
+    res.status(500).json({ error: 'Failed to fetch ETH large transactions' });
+  }
+});
+
+// Blockchair - BTC whale stats (large transactions)
+router.get('/blockchair/btc/stats', async (req, res) => {
+  try {
+    const url = 'https://api.blockchair.com/bitcoin/stats';
+    const response = await axios.get(url);
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch blockchair stats' });
+  }
+});
+
+// Mempool.space - BTC large transactions
+router.get('/btc/large-transactions', async (req, res) => {
+  try {
+    const { min_amount = 1, limit = 50 } = req.query;
+    console.log(`Fetching BTC transactions with min_amount=${min_amount}, limit=${limit}`);
+    // Get recent blocks from mempool.space (last 24h = ~144 blocks)
+    const blocksUrl = 'https://mempool.space/api/blocks';
+    const blocksRes = await axios.get(blocksUrl);
+    const blocks = blocksRes.data?.slice(0, 144) || [];
+    console.log(`Fetched ${blocks.length} blocks for 24h period`);
+    
+    const transactions = [];
+    let totalTxCount = 0;
+    let whaleTxCount = 0;
+    const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+    
+    for (const block of blocks) {
+      if (block.timestamp * 1000 < twentyFourHoursAgo) break;
+      
+      // Get transactions for this block
+      const blockTxUrl = `https://mempool.space/api/block/${block.id}/txs`;
+      const txRes = await axios.get(blockTxUrl);
+      const txs = txRes.data || [];
+      totalTxCount += txs.length;
+      
+      for (const tx of txs) {
+        // Calculate total output value in BTC (convert from satoshis)
+        const totalOut = tx.vout.reduce((sum, out) => sum + (out.value || 0), 0);
+        const btcAmount = totalOut / 100000000; // Convert satoshis to BTC
+        
+        if (btcAmount >= min_amount) {
+          whaleTxCount++;
+          transactions.push({
+            hash: tx.txid,
+            time: new Date(block.timestamp * 1000).toISOString(),
+            sender: tx.vin?.[0]?.prevout?.scriptpubkey_address || 'Unknown',
+            recipient: tx.vout?.[0]?.scriptpubkey_address || 'Unknown',
+            amount: btcAmount,
+            fee: (tx.fee || 0) / 100000000
+          });
+        }
+        
+        if (transactions.length >= limit) break;
+      }
+      if (transactions.length >= limit) break;
+    }
+    
+    const whalePercentage = totalTxCount > 0 ? (whaleTxCount / totalTxCount) * 100 : 0;
+    console.log(`Total transactions: ${totalTxCount}, Whale transactions: ${whaleTxCount}, Whale percentage: ${whalePercentage.toFixed(2)}%`);
+    
+    res.json({ 
+      data: { 
+        transactions,
+        stats: {
+          totalTransactions: totalTxCount,
+          whaleTransactions: whaleTxCount,
+          whalePercentage: whalePercentage.toFixed(2)
+        }
+      } 
+    });
+  } catch (error) {
+    console.error('Error fetching large transactions:', error);
+    res.status(500).json({ error: 'Failed to fetch large transactions' });
+  }
+});
+
 export default router;

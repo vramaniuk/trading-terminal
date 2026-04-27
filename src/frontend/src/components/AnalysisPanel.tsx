@@ -13,6 +13,7 @@ import type {
 } from "../hooks/useAnalysisData";
 import { useAnalysisData } from "../hooks/useAnalysisData";
 import { DerivativesSection, OnChainSection } from "./AnalysisMetricSections";
+import { WhaleTrackingSection } from "./WhaleTrackingSection";
 
 // ---- Stablecoin exclusion set ----
 const STABLECOINS = new Set([
@@ -2501,6 +2502,9 @@ export function AnalysisPanel() {
 
         {/* On-Chain Data */}
         <OnChainSection />
+
+        {/* Whale Tracking */}
+        <WhaleTrackingSection />
 
         {/* Derivatives & Market Structure */}
         <DerivativesSection />
