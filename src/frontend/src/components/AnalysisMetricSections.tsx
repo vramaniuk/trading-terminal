@@ -29,9 +29,6 @@ const C_DIM = "oklch(0.450 0.015 240)";
 const C_MID = "oklch(0.500 0.015 240)";
 const C_FG = "oklch(0.910 0.015 240)";
 
-function corsproxyUrl(url: string): string {
-  return `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
-}
 
 function fmtBigNum(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "N/A";
@@ -323,37 +320,26 @@ interface BlockchainInfoStats {
 
 async function fetchBlockchainStats(): Promise<Partial<OnChainData>> {
   const results: Partial<OnChainData> = {};
-  const primary = "/blockchain/stats?cors=true";
-  const fallback = `https://corsproxy.io/?url=${encodeURIComponent("https://blockchain.info/stats")}`;
+  const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
 
-  let json: BlockchainInfoStats | null = null;
   try {
-    const res = await window.fetch(primary);
-    if (res.ok) json = (await res.json()) as BlockchainInfoStats;
-  } catch {
-    /* try fallback */
-  }
-
-  if (!json) {
-    try {
-      const res = await window.fetch(fallback);
-      if (res.ok) json = (await res.json()) as BlockchainInfoStats;
-    } catch {
-      /* ignore */
+    const res = await window.fetch(`${BACKEND_API}/api/analysis/blockchain-stats`);
+    if (res.ok) {
+      const json = (await res.json()) as BlockchainInfoStats;
+      const addr = json.n_unique_addresses;
+      if (addr != null && Number.isFinite(addr)) results.activeAddresses = addr;
+      const txc = json.n_transactions;
+      if (txc != null && Number.isFinite(txc)) results.txCount24h = txc;
+      const hr = json.hash_rate;
+      if (hr != null && Number.isFinite(hr)) results.hashRateEH = hr / 1_000_000;
+      const supply = json.totalbc;
+      if (supply != null && Number.isFinite(supply))
+        results.circulatingSupplyBTC = supply / 1e8;
     }
+  } catch {
+    /* ignore */
   }
 
-  if (json) {
-    const addr = json.n_unique_addresses;
-    if (addr != null && Number.isFinite(addr)) results.activeAddresses = addr;
-    const txc = json.n_transactions;
-    if (txc != null && Number.isFinite(txc)) results.txCount24h = txc;
-    const hr = json.hash_rate;
-    if (hr != null && Number.isFinite(hr)) results.hashRateEH = hr / 1_000_000;
-    const supply = json.totalbc;
-    if (supply != null && Number.isFinite(supply))
-      results.circulatingSupplyBTC = supply / 1e8;
-  }
   return results;
 }
 
@@ -730,20 +716,13 @@ function useDerivativesData(): DerivativesData {
 
     // BTC Market Cap from CoinGecko for leverage ratio
     try {
-      const url =
-        "/coingecko/api/v3/coins/bitcoin?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false";
-      let json: { market_data?: { market_cap?: { usd?: number } } };
-      try {
-        const res = await window.fetch(url);
-        if (!res.ok) throw new Error();
-        json = await res.json();
-      } catch {
-        const res = await window.fetch(corsproxyUrl(url));
-        if (!res.ok) throw new Error();
-        json = await res.json();
+      const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+      const res = await window.fetch(`${BACKEND_API}/api/analysis/coingecko-coin/bitcoin`);
+      if (res.ok) {
+        const json = await res.json() as { market_data?: { market_cap?: { usd?: number } } };
+        const cap = json.market_data?.market_cap?.usd;
+        if (cap && Number.isFinite(cap)) results.btcMktCap = cap;
       }
-      const cap = json.market_data?.market_cap?.usd;
-      if (cap && Number.isFinite(cap)) results.btcMktCap = cap;
     } catch {
       /* ignore */
     }

@@ -980,25 +980,11 @@ function useMarketCapMetrics(): MarketCapMetrics {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchMarketCaps = useCallback(async () => {
+    const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
     try {
-      const globalUrl = "/coingecko/api/v3/global";
-      let globalData: {
-        data: {
-          total_market_cap: Record<string, number>;
-          market_cap_percentage: Record<string, number>;
-          market_cap_change_percentage_24h_usd: number;
-        };
-      };
-      try {
-        const res = await fetch(globalUrl);
-        if (!res.ok) throw new Error();
-        globalData = await res.json();
-      } catch {
-        const proxy = `https://corsproxy.io/?url=${encodeURIComponent(globalUrl)}`;
-        const res = await fetch(proxy);
-        if (!res.ok) throw new Error("coingecko global");
-        globalData = await res.json();
-      }
+      const globalRes = await fetch(`${BACKEND_API}/api/analysis/coingecko-global`);
+      if (!globalRes.ok) throw new Error("coingecko global");
+      const globalData = await globalRes.json();
       const totalUsd = globalData.data.total_market_cap?.usd ?? 0;
       const btcPct = globalData.data.market_cap_percentage?.btc ?? 0;
       const ethPct = globalData.data.market_cap_percentage?.eth ?? 0;
@@ -1009,19 +995,9 @@ function useMarketCapMetrics(): MarketCapMetrics {
 
       let stablecoinCap = 0;
       try {
-        const stableUrl =
-          "/coingecko/api/v3/coins/markets?vs_currency=usd&category=stablecoins&order=market_cap_desc&per_page=20&page=1";
-        let stableData: Array<{ market_cap: number }>;
-        try {
-          const res = await fetch(stableUrl);
-          if (!res.ok) throw new Error();
-          stableData = await res.json();
-        } catch {
-          const proxy = `https://corsproxy.io/?url=${encodeURIComponent(stableUrl)}`;
-          const res = await fetch(proxy);
-          if (!res.ok) throw new Error();
-          stableData = await res.json();
-        }
+        const stableRes = await fetch(`${BACKEND_API}/api/analysis/coingecko-markets?vs_currency=usd&category=stablecoins&order=market_cap_desc&per_page=20&page=1&sparkline=false`);
+        if (!stableRes.ok) throw new Error();
+        const stableData = await stableRes.json();
         stablecoinCap = stableData.reduce(
           (sum, c) => sum + (c.market_cap ?? 0),
           0,
@@ -1394,10 +1370,10 @@ function useGlobalSpotVolume(): GlobalSpotVolumeState {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchVolumes = useCallback(async () => {
+    const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
     async function fetchCoin(id: string): Promise<number> {
-      const url = `/coingecko/api/v3/coins/${id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`;
       try {
-        const res = await fetch(url);
+        const res = await fetch(`${BACKEND_API}/api/analysis/coingecko-coin/${id}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         return (
@@ -1405,14 +1381,7 @@ function useGlobalSpotVolume(): GlobalSpotVolumeState {
             .market_data?.total_volume?.usd ?? 0
         );
       } catch {
-        const proxy = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
-        const res = await fetch(proxy);
-        if (!res.ok) throw new Error("proxy fail");
-        const data = await res.json();
-        return (
-          (data as { market_data?: { total_volume?: { usd?: number } } })
-            .market_data?.total_volume?.usd ?? 0
-        );
+        return 0;
       }
     }
     try {

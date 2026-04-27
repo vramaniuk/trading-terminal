@@ -24,13 +24,9 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const DZENGI_API = "https://api-adapter.dzengi.com/api/v1";
+const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
 const POLL_INTERVAL_MS = 10_000;
 const COINGECKO_POLL_MS = 60_000;
-const CORSPROXY = "https://corsproxy.io/?url=";
-const COINGECKO_URL_P1 =
-  "/coingecko/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false";
-const COINGECKO_URL_P2 =
-  "/coingecko/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=false";
 
 // ---- Independent volume metrics hook ----
 interface VolumeMetrics {
@@ -88,17 +84,14 @@ function useVolumeMetrics(): VolumeMetrics {
 // ---- CoinGecko market cap hook — fetches pages 1 & 2 (500 coins) ----
 type CoinGeckoEntry = { symbol: string; market_cap: number | null };
 
-async function fetchCoinGeckoPage(url: string): Promise<CoinGeckoEntry[]> {
-  // Try direct first, fall back to corsproxy
+async function fetchCoinGeckoPage(page: number): Promise<CoinGeckoEntry[]> {
   try {
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
-    if (res.ok) return (await res.json()) as CoinGeckoEntry[];
+    const res = await fetch(`${BACKEND_API}/api/analysis/coingecko-markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${page}&sparkline=false`);
+    if (!res.ok) return [];
+    return (await res.json()) as CoinGeckoEntry[];
   } catch {
-    // CORS blocked — fall through
+    return [];
   }
-  const proxyRes = await fetch(`${CORSPROXY}${encodeURIComponent(url)}`);
-  if (!proxyRes.ok) return [];
-  return (await proxyRes.json()) as CoinGeckoEntry[];
 }
 
 function useMarketCaps(): Map<string, number> {
@@ -107,8 +100,8 @@ function useMarketCaps(): Map<string, number> {
   const fetchCaps = useCallback(async () => {
     try {
       const [p1, p2] = await Promise.all([
-        fetchCoinGeckoPage(COINGECKO_URL_P1),
-        fetchCoinGeckoPage(COINGECKO_URL_P2),
+        fetchCoinGeckoPage(1),
+        fetchCoinGeckoPage(2),
       ]);
       const all = [...p1, ...p2];
       const map = new Map<string, number>();

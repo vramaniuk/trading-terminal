@@ -104,4 +104,50 @@ router.get('/tickers', async (req, res) => {
   }
 });
 
+// Blockchain stats (for on-chain data)
+router.get('/blockchain-stats', async (req, res) => {
+  try {
+    const response = await axios.get('https://blockchain.info/stats');
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch blockchain stats' });
+  }
+});
+
+// CoinGecko global market data
+router.get('/coingecko-global', async (req, res) => {
+  try {
+    const response = await axios.get('https://api.coingecko.com/api/v3/global');
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch coingecko global data' });
+  }
+});
+
+// CoinGecko coin data
+router.get('/coingecko-coin/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const response = await axios.get(`https://api.coingecko.com/api/v3/coins/${id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`);
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch coingecko coin data' });
+  }
+});
+
+// CoinGecko markets data
+router.get('/coingecko-markets', async (req, res) => {
+  try {
+    const { vs_currency = 'usd', order = 'market_cap_desc', per_page = 250, page = 1, category } = req.query;
+    let url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=${vs_currency}&order=${order}&per_page=${per_page}&page=${page}&sparkline=false`;
+    if (category) {
+      url += `&category=${category}`;
+    }
+    const response = await axios.get(url);
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch coingecko markets data' });
+  }
+});
+
 export default router;
