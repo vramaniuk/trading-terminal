@@ -323,7 +323,7 @@ interface BlockchainInfoStats {
 
 async function fetchBlockchainStats(): Promise<Partial<OnChainData>> {
   const results: Partial<OnChainData> = {};
-  const primary = "https://blockchain.info/stats?cors=true";
+  const primary = "/blockchain/stats?cors=true";
   const fallback = `https://corsproxy.io/?url=${encodeURIComponent("https://blockchain.info/stats")}`;
 
   let json: BlockchainInfoStats | null = null;
@@ -390,7 +390,7 @@ function useOnChainData(): OnChainData {
     // Netflow: blockchain.info estimated tx volume
     try {
       const url =
-        "https://api.blockchain.info/charts/estimated-transaction-volume?timespan=1days&format=json&cors=true";
+        "/blockchain/charts/estimated-transaction-volume?timespan=1days&format=json&cors=true";
       const res = await window.fetch(url);
       if (res.ok) {
         const json = (await res.json()) as { values: Array<{ y: number }> };
@@ -731,7 +731,7 @@ function useDerivativesData(): DerivativesData {
     // BTC Market Cap from CoinGecko for leverage ratio
     try {
       const url =
-        "https://api.coingecko.com/api/v3/coins/bitcoin?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false";
+        "/coingecko/api/v3/coins/bitcoin?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false";
       let json: { market_data?: { market_cap?: { usd?: number } } };
       try {
         const res = await window.fetch(url);

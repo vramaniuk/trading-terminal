@@ -981,7 +981,7 @@ function useMarketCapMetrics(): MarketCapMetrics {
 
   const fetchMarketCaps = useCallback(async () => {
     try {
-      const globalUrl = "https://api.coingecko.com/api/v3/global";
+      const globalUrl = "/coingecko/api/v3/global";
       let globalData: {
         data: {
           total_market_cap: Record<string, number>;
@@ -1010,7 +1010,7 @@ function useMarketCapMetrics(): MarketCapMetrics {
       let stablecoinCap = 0;
       try {
         const stableUrl =
-          "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category=stablecoins&order=market_cap_desc&per_page=20&page=1";
+          "/coingecko/api/v3/coins/markets?vs_currency=usd&category=stablecoins&order=market_cap_desc&per_page=20&page=1";
         let stableData: Array<{ market_cap: number }>;
         try {
           const res = await fetch(stableUrl);
@@ -1395,7 +1395,7 @@ function useGlobalSpotVolume(): GlobalSpotVolumeState {
 
   const fetchVolumes = useCallback(async () => {
     async function fetchCoin(id: string): Promise<number> {
-      const url = `https://api.coingecko.com/api/v3/coins/${id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`;
+      const url = `/coingecko/api/v3/coins/${id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`;
       try {
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

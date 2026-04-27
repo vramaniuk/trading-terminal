@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const DZENGI_REST_BASE = "https://api-adapter.dzengi.com/api/v1";
+const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
 const REST_POLL_INTERVAL_MS = 5_000;
 
 const SYMBOLS = [
@@ -28,8 +28,8 @@ export interface DzengiPriceFeed {
 }
 
 async function fetchTickersRest(): Promise<Record<string, AssetPrice>> {
-  const res = await fetch(`${DZENGI_REST_BASE}/ticker/24hr`);
-  if (!res.ok) throw new Error(`REST ticker failed: ${res.status}`);
+  const res = await fetch(`${BACKEND_API}/api/analysis/tickers`);
+  if (!res.ok) throw new Error(`REST ticker failed`);
   const data = await res.json();
   const arr: unknown[] = Array.isArray(data) ? data : [];
   const result: Record<string, AssetPrice> = {};

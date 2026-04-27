@@ -1,17 +1,17 @@
 // Version: 1.0.0
-type Data__791452850<K, V> =
-  {var count : Nat__490723111; kvs : [var ?(K, V)]};
-type Internal__8484328<K, V> =
-  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
-type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
-type Nat__490723111 = Nat__920180692;
+type Data__678143819<K, V> =
+  {var count : Nat__107743821; kvs : [var ?(K, V)]};
+type Internal__272372588<K, V> =
+  {children : [var ?Node__216023231<K, V>]; data : Data__678143819<K, V>};
+type Leaf__366843236<K, V> = {data : Data__678143819<K, V>};
+type Nat__107743821 = Nat__920180692;
 type Nat__920180692 = Nat;
-type Node__46230540<K, V> =
-  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
-type Pnl__1052200732 = Float;
-type Status__1000080315 = {#closed; #open};
-type TradeType__787891495 = {#long; #short};
-type Trade__711108367 =
+type Node__216023231<K, V> =
+  {#internal : Internal__272372588<K, V>; #leaf : Leaf__366843236<K, V>};
+type Pnl__494170348 = Float;
+type Status__638961763 = {#closed; #open};
+type TradeType__807715374 = {#long; #short};
+type Trade__801130988 =
   {
     asset : Text;
     currentPrice : Float;
@@ -19,19 +19,19 @@ type Trade__711108367 =
     id : Nat;
     mae : Float;
     mfe : Float;
-    pnl : Pnl__1052200732;
+    pnl : Pnl__494170348;
     quantity : Float;
-    status : Status__1000080315;
+    status : Status__638961763;
     timestamp : Int;
-    tradeType : TradeType__787891495
+    tradeType : TradeType__807715374
   };
 actor {
   stable var nextId : Nat;
   stable trades :
     {
-      var root : Node__46230540<Nat, Trade__711108367>;
-      var size : Nat__490723111
+      var root : Node__216023231<Nat, Trade__801130988>;
+      var size : Nat__107743821
     };
   stable us10ySnapshots :
-    {var root : Node__46230540<Text, Float>; var size : Nat__490723111}
+    {var root : Node__216023231<Text, Float>; var size : Nat__107743821}
 };

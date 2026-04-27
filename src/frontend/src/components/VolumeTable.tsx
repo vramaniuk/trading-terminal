@@ -28,9 +28,9 @@ const POLL_INTERVAL_MS = 10_000;
 const COINGECKO_POLL_MS = 60_000;
 const CORSPROXY = "https://corsproxy.io/?url=";
 const COINGECKO_URL_P1 =
-  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false";
+  "/coingecko/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false";
 const COINGECKO_URL_P2 =
-  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=false";
+  "/coingecko/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=false";
 
 // ---- Independent volume metrics hook ----
 interface VolumeMetrics {
