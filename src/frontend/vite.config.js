@@ -27,6 +27,7 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    historyApiFallback: true,
   },
   plugins: [
     environment("all", { prefix: "BACKEND_" }),

@@ -2,7 +2,6 @@ import { Toaster } from "@/components/ui/sonner";
 import {
   Outlet,
   RouterProvider,
-  createHashHistory,
   createRootRoute,
   createRoute,
   createRouter,
@@ -182,8 +181,6 @@ function TradingPage() {
 }
 
 // ── Router definition ──────────────────────────────────────────────────────────
-const hashHistory = createHashHistory();
-
 const rootRoute = createRootRoute({ component: RootLayout });
 
 const dashboardRoute = createRoute({
@@ -210,7 +207,7 @@ const routeTree = rootRoute.addChildren([
   tradingRoute,
 ]);
 
-const router = createRouter({ routeTree, history: hashHistory });
+const router = createRouter({ routeTree });
 
 declare module "@tanstack/react-router" {
   interface Register {
