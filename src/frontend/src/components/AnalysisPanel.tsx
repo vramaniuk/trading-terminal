@@ -2406,7 +2406,6 @@ export function AnalysisPanel() {
 
         {/* Exchange Balances */}
         <section data-ocid="analysis.section.exchange-balances">
-          <SectionHeader title="Exchange Balances" subtitle="BTC & ETH reserves" />
           <ExchangeBalanceTable />
           <p
             className="mt-2 text-[10px] italic"

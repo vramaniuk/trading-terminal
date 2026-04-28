@@ -8,7 +8,6 @@ import {
   DollarSign,
   Hash,
   Layers,
-  Lock,
   Pickaxe,
   TrendingDown,
   TrendingUp,
@@ -214,87 +213,6 @@ export function MetricSectionHeader({
         className="flex-1 h-px"
         style={{ background: "oklch(1 0 0 / 0.07)" }}
       />
-    </div>
-  );
-}
-
-// ---- Glassnode-gated unavailable card ----
-function GlassnodeUnavailableCard({
-  title,
-  subtitle,
-  description,
-}: {
-  title: string;
-  subtitle: string;
-  description: string;
-}) {
-  return (
-    <div
-      className="rounded-xl p-4 flex flex-col gap-2 min-w-0 opacity-60"
-      style={{
-        background: "oklch(0.155 0.020 240)",
-        border: "1px solid oklch(1 0 0 / 0.06)",
-      }}
-    >
-      <div className="flex items-start justify-between gap-2 min-w-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-            style={{
-              background: "oklch(0.450 0.015 240 / 0.15)",
-              color: C_DIM,
-            }}
-          >
-            <Lock className="w-3.5 h-3.5" />
-          </div>
-          <div className="min-w-0">
-            <div
-              className="text-xs font-semibold truncate"
-              style={{ color: C_MID }}
-            >
-              {title}
-            </div>
-            <div
-              className="text-[10px] font-mono truncate"
-              style={{ color: C_DIM }}
-            >
-              {subtitle}
-            </div>
-          </div>
-        </div>
-        <span
-          className="text-[10px] font-semibold shrink-0 px-2 py-0.5 rounded-full font-mono"
-          style={{
-            background: "oklch(0.450 0.015 240 / 0.15)",
-            color: C_DIM,
-            border: "1px solid oklch(1 0 0 / 0.08)",
-          }}
-        >
-          Glassnode Pro
-        </span>
-      </div>
-      <div
-        className="font-mono font-bold text-lg mt-0.5"
-        style={{ color: C_DIM }}
-      >
-        Unavailable
-      </div>
-      <div
-        className="text-[11px] font-semibold px-2 py-1 rounded-lg w-fit"
-        style={{
-          background: "oklch(0.155 0.020 240)",
-          color: C_DIM,
-          border: "1px solid oklch(1 0 0 / 0.06)",
-        }}
-      >
-        🔒 Glassnode Pro required
-      </div>
-      <p
-        className="text-[10px] italic leading-relaxed"
-        style={{ color: C_DIM }}
-      >
-        {description}
-      </p>
     </div>
   );
 }
@@ -786,21 +704,8 @@ export function OnChainSection() {
           badge="blockchain.info"
         />
 
-        {/* ── Glassnode-gated cards ── */}
         {/* Hashrate Chart */}
         <HashrateChart />
-
-        <GlassnodeUnavailableCard
-          title="Exchange Flows"
-          subtitle="BTC net flow into/out of exchanges"
-          description="Exchange inflows = sell pressure. Outflows = accumulation signal. Requires Glassnode API subscription."
-        />
-
-        <GlassnodeUnavailableCard
-          title="Whale Count"
-          subtitle="Addresses holding > 1,000 BTC"
-          description="Tracks the number of whale wallets over time — rising count signals distribution, falling count signals accumulation."
-        />
       </div>
     </section>
   );
