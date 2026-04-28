@@ -314,11 +314,18 @@ interface OnChainData {
   loading: boolean;
 }
 
-interface BlockchainInfoStats {
+interface BlockchainStatsResponse {
+  hashrate?: number;           // in EH/s
+  difficulty?: number;
+  totalbc?: number;            // in satoshis
+  n_transactions?: number;     // 24h tx count
   n_unique_addresses?: number;
-  n_transactions?: number;
-  hashrate?: number;  // in EH/s from backend
-  totalbc?: number;   // in satoshis
+  market_price_usd?: number;
+  estimated_transaction_volume_usd?: number;
+  miners_revenue_usd?: number;
+  minutes_between_blocks?: number;
+  supplyPct?: number;          // % of 21M
+  timestamp?: string;
 }
 
 async function fetchBlockchainStats(): Promise<Partial<OnChainData>> {
@@ -328,18 +335,32 @@ async function fetchBlockchainStats(): Promise<Partial<OnChainData>> {
   try {
     const res = await window.fetch(`${BACKEND_API}/api/analysis/blockchain-stats`);
     if (res.ok) {
-      const json = (await res.json()) as BlockchainInfoStats;
-      const addr = json.n_unique_addresses;
-      if (addr != null && Number.isFinite(addr)) results.activeAddresses = addr;
-      const txc = json.n_transactions;
-      if (txc != null && Number.isFinite(txc)) results.txCount24h = txc;
-      // hashrate is already in EH/s from backend
-      const hr = json.hashrate;
-      if (hr != null && Number.isFinite(hr)) results.hashRateEH = hr;
-      // totalbc is in satoshis from blockchain.info, convert to BTC
-      const supply = json.totalbc;
-      if (supply != null && Number.isFinite(supply))
-        results.circulatingSupplyBTC = supply / 1e8;
+      const json = (await res.json()) as BlockchainStatsResponse;
+
+      // Active addresses
+      if (json.n_unique_addresses != null && Number.isFinite(json.n_unique_addresses)) {
+        results.activeAddresses = json.n_unique_addresses;
+      }
+
+      // Transaction count (24h)
+      if (json.n_transactions != null && Number.isFinite(json.n_transactions)) {
+        results.txCount24h = json.n_transactions;
+      }
+
+      // Hashrate (already in EH/s from backend)
+      if (json.hashrate != null && Number.isFinite(json.hashrate)) {
+        results.hashRateEH = json.hashrate;
+      }
+
+      // Circulating supply (convert satoshis to BTC)
+      if (json.totalbc != null && Number.isFinite(json.totalbc)) {
+        results.circulatingSupplyBTC = json.totalbc / 1e8;
+      }
+
+      // Netflow volume (estimated transaction volume in USD)
+      if (json.estimated_transaction_volume_usd != null && Number.isFinite(json.estimated_transaction_volume_usd)) {
+        results.netflowVol = json.estimated_transaction_volume_usd;
+      }
     }
   } catch {
     /* ignore */
@@ -373,20 +394,6 @@ function useOnChainData(): OnChainData {
         const json = (await res.json()) as { count: number; vsize: number };
         results.mempoolCount = json.count;
         results.mempoolVsizeMB = json.vsize / 1_000_000;
-      }
-    } catch {
-      /* ignore */
-    }
-
-    // Netflow: blockchain.info estimated tx volume
-    try {
-      const url =
-        "/blockchain/charts/estimated-transaction-volume?timespan=1days&format=json&cors=true";
-      const res = await window.fetch(url);
-      if (res.ok) {
-        const json = (await res.json()) as { values: Array<{ y: number }> };
-        const last = json.values?.[json.values.length - 1];
-        if (last?.y) results.netflowVol = last.y;
       }
     } catch {
       /* ignore */
@@ -876,7 +883,7 @@ function useDerivativesData(): DerivativesData {
           latest?: { value_usd?: number };
         };
         const oiVal = json.latest?.value_usd;
-        if (Number.isFinite(oiVal) && oiVal > 0) results.btcOiUsd = oiVal;
+        if (Number.isFinite(oiVal) && (oiVal as number) > 0) results.btcOiUsd = oiVal;
       }
     } catch {
       /* ignore */

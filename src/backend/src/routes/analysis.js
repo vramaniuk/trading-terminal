@@ -117,52 +117,51 @@ router.get('/tickers', async (req, res) => {
   }
 });
 
-// Blockchain stats (for on-chain data) - hashrate, difficulty, active addresses, transactions, supply
+// Blockchain stats - Single call to /stats endpoint with fallback to charts API
 router.get('/blockchain-stats', async (req, res) => {
   try {
-    // Helper to fetch with fallback
-    const fetchWithFallback = async (url) => {
+    // Helper to fetch with CORS proxy fallback
+    const fetchWithFallback = async (url, options = {}) => {
       try {
-        return await axios.get(url, { timeout: 8000 });
+        return await axios.get(url, { timeout: 10000, ...options });
       } catch {
-        // Try with CORS proxy
-        return await axios.get(proxiedGet(url), { timeout: 10000 });
+        return await axios.get(proxiedGet(url), { timeout: 15000, ...options });
       }
     };
 
-    // Fetch hashrate (in GH/s, convert to EH/s)
-    const hashrateRes = await fetchWithFallback('https://blockchain.info/q/hashrate');
-    const hashrate = Number.parseFloat(hashrateRes.data || 0) / 1_000_000; // GH/s to EH/s
+    // Primary: Use /stats endpoint for all current data
+    const statsRes = await fetchWithFallback('https://api.blockchain.info/stats');
+    const stats = statsRes.data || {};
 
-    // Fetch difficulty
-    const difficultyRes = await fetchWithFallback('https://blockchain.info/q/getdifficulty');
-    const difficulty = Number.parseFloat(difficultyRes.data || 0);
+    // Fallback: Fetch active addresses from charts API if not in stats
+    let n_unique_addresses = null;
+    try {
+      const addressesRes = await fetchWithFallback('https://api.blockchain.info/charts/n-unique-addresses?timespan=2days&format=json&sampled=false');
+      const values = addressesRes.data?.values || [];
+      // Get the most recent value
+      n_unique_addresses = values.length > 0 ? values[values.length - 1].y : null;
+    } catch {
+      // Keep null if unavailable
+    }
 
-    // Fetch total BTC supply (in satoshis, convert to BTC)
-    const supplyRes = await fetchWithFallback('https://blockchain.info/q/totalbc');
-    const totalbc = Number.parseFloat(supplyRes.data || 0);
-
-    // Fetch 24h transaction count
-    const txRes = await fetchWithFallback('https://blockchain.info/q/24hrtransactioncount');
-    const n_transactions = Number.parseInt(txRes.data || 0, 10);
-
-    // Fetch unique addresses (JSON chart data - 24h)
-    const addressesRes = await fetchWithFallback('https://api.blockchain.info/charts/n-unique-addresses?timespan=1days&format=json');
-    const addressesData = addressesRes.data?.values || [];
-    const n_unique_addresses = addressesData.length > 0 ? addressesData[addressesData.length - 1].y : 0;
-
-    // Fetch mempool size (JSON chart data)
-    const mempoolRes = await fetchWithFallback('https://api.blockchain.info/charts/mempool-size?format=json');
-    const mempoolData = mempoolRes.data?.values || [];
-    const mempoolSize = mempoolData.length > 0 ? mempoolData[mempoolData.length - 1].y : 0;
+    // Convert values to proper units
+    const hashrateEH = stats.hash_rate ? stats.hash_rate / 1_000_000_000 : null; // GH/s to EH/s
+    const totalbcBTC = stats.totalbc ? stats.totalbc / 1e8 : null; // satoshis to BTC
+    const supplyPct = totalbcBTC ? (totalbcBTC / 21_000_000) * 100 : null;
 
     res.json({
-      hashrate,
-      difficulty,
-      totalbc,
-      n_transactions,
+      hashrate: hashrateEH,
+      difficulty: stats.difficulty || null,
+      totalbc: stats.totalbc || null,
+      n_transactions: stats.n_tx || null,
       n_unique_addresses,
-      mempoolSize,
+      mempoolCount: null, // Not in /stats, fetched separately
+      mempoolVsizeMB: null,
+      market_price_usd: stats.market_price_usd || null,
+      estimated_transaction_volume_usd: stats.estimated_transaction_volume_usd || null,
+      miners_revenue_usd: stats.miners_revenue_usd || null,
+      minutes_between_blocks: stats.minutes_between_blocks || null,
+      supplyPct,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -171,14 +170,25 @@ router.get('/blockchain-stats', async (req, res) => {
   }
 });
 
-// Hashrate historical chart data
+// Hashrate historical chart data from blockchain.info
 router.get('/hashrate-chart', async (req, res) => {
   try {
     const { days = 30 } = req.query;
-    const timespan = days === '1' ? '1days' : days === '7' ? '7days' : days === '90' ? '3months' : days === '180' ? '6months' : days === '365' ? '1year' : '30days';
+    // Map days to timespan format
+    const timespanMap = {
+      '1': '1days',
+      '7': '7days',
+      '30': '30days',
+      '90': '3months',
+      '180': '6months',
+      '365': '1year'
+    };
+    const timespan = timespanMap[days] || '30days';
 
-    const url = `https://api.blockchain.info/charts/hash-rate?timespan=${timespan}&format=json`;
-    const response = await axios.get(url, { timeout: 10000 }).catch(() => axios.get(proxiedGet(url), { timeout: 10000 }));
+    const url = `https://api.blockchain.info/charts/hash-rate?timespan=${timespan}&format=json&sampled=true`;
+    const response = await axios.get(url, { timeout: 15000 }).catch(() =>
+      axios.get(proxiedGet(url), { timeout: 20000 })
+    );
 
     const values = response.data?.values || [];
     const data = values.map(point => ({
@@ -190,6 +200,7 @@ router.get('/hashrate-chart', async (req, res) => {
       asset: 'btc',
       metric: 'hashrate',
       unit: 'EH/s',
+      description: response.data?.description || 'Bitcoin network hash rate',
       data
     });
   } catch (error) {
