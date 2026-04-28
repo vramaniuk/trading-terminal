@@ -9,6 +9,24 @@ const BYBIT_API = 'https://api.bybit.com';
 const OKX_API = 'https://www.okx.com';
 const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY;
 
+// Simple in-memory cache with TTL for CoinGecko API (rate limit: 10-30 calls/min free tier)
+const cache = new Map();
+const CACHE_TTL_MS = 60_000; // 60 seconds cache
+
+function getCached(key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiry) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCached(key, data, ttlMs = CACHE_TTL_MS) {
+  cache.set(key, { data, expiry: Date.now() + ttlMs });
+}
+
 function proxiedGet(url) {
   return `${CORSPROXY}${encodeURIComponent(url)}`;
 }
@@ -65,6 +83,12 @@ router.get('/macro/:symbol', async (req, res) => {
 // BTC Social
 router.get('/btc-social', async (req, res) => {
   try {
+    const cacheKey = 'btc-social';
+    const cached = getCached(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+    
     const params = new URLSearchParams({
       localization: 'false',
       tickers: 'false',
@@ -77,10 +101,13 @@ router.get('/btc-social', async (req, res) => {
     }
     const url = `https://api.coingecko.com/api/v3/coins/bitcoin?${params.toString()}`;
     let response = await axios.get(url).catch(() => axios.get(proxiedGet(url)));
-    res.json({
+    const result = {
       bullishPct: Number(response.data.sentiment_votes_up_percentage ?? 0),
       bearishPct: Number(response.data.sentiment_votes_down_percentage ?? 0)
-    });
+    };
+    
+    setCached(cacheKey, result, 120000); // Cache for 2 minutes
+    res.json(result);
   } catch (error) {
     console.error('Error fetching btc-social:', error.message);
     res.status(500).json({ error: 'Failed to fetch social' });
@@ -307,12 +334,22 @@ router.get('/hashrate-chart', async (req, res) => {
 // CoinGecko global market data
 router.get('/coingecko-global', async (req, res) => {
   try {
+    const cacheKey = 'coingecko-global';
+    const cached = getCached(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+    
     const params = new URLSearchParams();
     if (COINGECKO_API_KEY) {
       params.append('x_cg_demo_api_key', COINGECKO_API_KEY);
     }
     const url = `https://api.coingecko.com/api/v3/global?${params.toString()}`;
-    const response = await axios.get(url).catch(() => axios.get(proxiedGet(url)));
+    const response = await axios.get(url, { timeout: 10000 }).catch(() => 
+      axios.get(proxiedGet(url), { timeout: 15000 })
+    );
+    
+    setCached(cacheKey, response.data, 60000); // Cache for 60 seconds
     res.json(response.data);
   } catch (error) {
     console.error('Error fetching coingecko global:', error.message);
@@ -324,6 +361,12 @@ router.get('/coingecko-global', async (req, res) => {
 router.get('/coingecko-coin/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const cacheKey = `coingecko-coin-${id}`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+    
     const params = new URLSearchParams({
       localization: 'false',
       tickers: 'false',
@@ -335,7 +378,11 @@ router.get('/coingecko-coin/:id', async (req, res) => {
       params.append('x_cg_demo_api_key', COINGECKO_API_KEY);
     }
     const url = `https://api.coingecko.com/api/v3/coins/${id}?${params.toString()}`;
-    const response = await axios.get(url).catch(() => axios.get(proxiedGet(url)));
+    const response = await axios.get(url, { timeout: 10000 }).catch(() => 
+      axios.get(proxiedGet(url), { timeout: 15000 })
+    );
+    
+    setCached(cacheKey, response.data, 60000); // Cache for 60 seconds
     res.json(response.data);
   } catch (error) {
     console.error('Error fetching coingecko coin:', error.message);
@@ -348,6 +395,12 @@ router.get('/volume-chart/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { days = 30 } = req.query;
+    const cacheKey = `volume-chart-${id}-${days}`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+    
     const params = new URLSearchParams({
       vs_currency: 'usd',
       days: String(days),
@@ -376,14 +429,17 @@ router.get('/volume-chart/:id', async (req, res) => {
       ? data.filter((_, i) => i % Math.ceil(data.length / 45) === 0)
       : data;
     
-    res.json({
+    const result = {
       asset: id,
       metric: 'volume',
       unit: 'USD',
       description: `24h spot trading volume aggregated across all exchanges (CoinGecko)`,
       days: Number(days),
       data: downsampled,
-    });
+    };
+    
+    setCached(cacheKey, result, 120000); // Cache for 2 minutes
+    res.json(result);
   } catch (error) {
     console.error('Error fetching volume chart:', error.message);
     res.status(500).json({ error: 'Failed to fetch volume data' });
