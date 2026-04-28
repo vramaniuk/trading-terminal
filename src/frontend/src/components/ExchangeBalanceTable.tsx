@@ -39,7 +39,7 @@ const EXCHANGE_LABELS: Record<string, string> = {
   binance: "Binance",
   okx: "OKX",
   bybit: "Bybit",
-  coinbase: "Coinbase",
+  coinbasepro: "Coinbase Pro",
   bitfinex: "Bitfinex",
   kraken: "Kraken",
 };
@@ -48,7 +48,7 @@ const EXCHANGE_COLORS: Record<string, string> = {
   binance: "oklch(0.637 0.220 25)",
   okx: "oklch(0.723 0.185 150)",
   bybit: "oklch(0.785 0.135 200)",
-  coinbase: "oklch(0.637 0.220 25)",
+  coinbasepro: "oklch(0.637 0.220 25)",
   bitfinex: "oklch(0.785 0.135 200)",
   kraken: "oklch(0.723 0.185 150)",
 };
@@ -306,7 +306,7 @@ export function ExchangeBalanceTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const exchanges = ["binance", "okx", "bybit", "coinbase", "bitfinex", "kraken"];
+  const exchanges = ["binance", "okx", "bybit", "coinbasepro", "bitfinex", "kraken"];
   const assets = ["btc", "eth"];
 
   const fetchData = useCallback(async () => {

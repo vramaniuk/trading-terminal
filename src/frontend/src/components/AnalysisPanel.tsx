@@ -15,6 +15,7 @@ import { useAnalysisData } from "../hooks/useAnalysisData";
 import { DerivativesSection, OnChainSection } from "./AnalysisMetricSections";
 import { WhaleTrackingSection } from "./WhaleTrackingSection";
 import { ExchangeBalanceTable } from "./ExchangeBalanceTable";
+import { SectorPerformance } from "./SectorPerformance";
 
 // ---- Stablecoin exclusion set ----
 const STABLECOINS = new Set([
@@ -2499,6 +2500,12 @@ export function AnalysisPanel() {
               </div>
             )}
           </div>
+        </section>
+
+        {/* Sector Performance */}
+        <section data-ocid="analysis.section.sectors">
+          <SectionHeader title="Sector Performance" badge="CoinGecko" />
+          <SectorPerformance />
         </section>
 
         {/* On-Chain Data */}

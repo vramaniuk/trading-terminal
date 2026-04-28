@@ -5,6 +5,7 @@ const router = express.Router();
 
 const CORSPROXY = 'https://corsproxy.io/?url=';
 const BINANCE_FAPI = 'https://fapi.binance.com';
+const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY;
 
 function proxiedGet(url) {
   return `${CORSPROXY}${encodeURIComponent(url)}`;
@@ -358,7 +359,7 @@ router.get('/exchange-balances', async (req, res) => {
       binance: { btc: 500000, eth: 3500000 },
       okx: { btc: 300000, eth: 2000000 },
       bybit: { btc: 250000, eth: 1800000 },
-      coinbase: { btc: 400000, eth: 2800000 },
+      coinbasepro: { btc: 400000, eth: 2800000 },
       bitfinex: { btc: 150000, eth: 1200000 },
       kraken: { btc: 180000, eth: 1400000 }
     };
@@ -381,6 +382,38 @@ router.get('/exchange-balances', async (req, res) => {
   } catch (error) {
     console.error('Error fetching exchange balances:', error);
     res.status(500).json({ error: 'Failed to fetch exchange balances' });
+  }
+});
+
+// CoinGecko Categories (Sector Performance)
+router.get('/categories', async (req, res) => {
+  try {
+    const url = 'https://api.coingecko.com/api/v3/coins/categories';
+    const params = new URLSearchParams();
+    if (COINGECKO_API_KEY) {
+      params.append('x_cg_demo_api_key', COINGECKO_API_KEY);
+    }
+    
+    const response = await axios.get(`${url}?${params.toString()}`);
+    
+    // Filter and format relevant categories
+    const relevantCategories = response.data
+      .filter(cat => cat.market_cap && cat.market_cap > 0)
+      .map(cat => ({
+        id: cat.id,
+        name: cat.name,
+        marketCap: cat.market_cap,
+        marketCapChange24h: cat.market_cap_change_24h || 0,
+        volume24h: cat.volume_24h || 0,
+        top3Coins: cat.top_3_coins || []
+      }))
+      .sort((a, b) => b.marketCap - a.marketCap)
+      .slice(0, 15); // Top 15 categories by market cap
+    
+    res.json(relevantCategories);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: 'Failed to fetch categories' });
   }
 });
 
