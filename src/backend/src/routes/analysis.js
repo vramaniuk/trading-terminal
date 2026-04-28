@@ -315,7 +315,7 @@ router.get('/hashrate-chart', async (req, res) => {
     const values = response.data?.values || [];
     const data = values.map(point => ({
       date: new Date(point.x * 1000).toISOString().split('T')[0],
-      value: point.y / 1_000_000_000  // GH/s to EH/s
+      value: point.y / 1_000_000  // TH/s to EH/s
     }));
 
     res.json({
