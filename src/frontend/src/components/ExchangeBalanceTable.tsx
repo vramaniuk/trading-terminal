@@ -42,6 +42,7 @@ const EXCHANGE_LABELS: Record<string, string> = {
   coinbasepro: "Coinbase Pro",
   bitfinex: "Bitfinex",
   kraken: "Kraken",
+  gemini: "Gemini",
 };
 
 const EXCHANGE_COLORS: Record<string, string> = {
@@ -51,6 +52,7 @@ const EXCHANGE_COLORS: Record<string, string> = {
   coinbasepro: "oklch(0.637 0.220 25)",
   bitfinex: "oklch(0.785 0.135 200)",
   kraken: "oklch(0.723 0.185 150)",
+  gemini: "oklch(0.85 0.18 85)",
 };
 
 const ASSET_LABELS = {
@@ -306,7 +308,7 @@ export function ExchangeBalanceTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const exchanges = ["binance", "okx", "bybit", "coinbasepro", "bitfinex", "kraken"];
+  const exchanges = ["binance", "okx", "bybit", "coinbasepro", "bitfinex", "kraken", "gemini"];
   const assets = ["btc", "eth"];
 
   const fetchData = useCallback(async () => {
