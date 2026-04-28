@@ -1695,7 +1695,6 @@ export function AnalysisPanel() {
   const data = useAnalysisData();
   const mktCap = useMarketCapMetrics();
   const topMovers = useTopMovers();
-  const globalOI = useGlobalOI();
   const fngCountdown = useFngCountdown(data.fearGreed.timeUntilUpdate);
   const { fearGreed } = data;
   const fgColor = fngColor(fearGreed.value);
@@ -1750,6 +1749,114 @@ export function AnalysisPanel() {
       </div>
 
       <div className="px-4 sm:px-6 py-4 sm:py-6 flex flex-col gap-8 md:gap-10">
+        {/* Derivatives & Market Structure */}
+        <DerivativesSection />
+
+        {/* Funding Rates */}
+        <section data-ocid="analysis.section.funding">
+          <SectionHeader
+            title="Crypto Derivatives — Funding Rates"
+            badge="Binance"
+          />
+          <div className="flex flex-col sm:flex-row gap-4">
+            <FundingCard
+              asset="BTC"
+              rate={data.btcFunding.rate}
+              nextSettlement={data.btcFunding.nextSettlement}
+              intervalHours={data.btcFunding.intervalHours}
+              loading={data.btcFunding.loading}
+              error={data.btcFunding.error}
+            />
+            <FundingCard
+              asset="ETH"
+              rate={data.ethFunding.rate}
+              nextSettlement={data.ethFunding.nextSettlement}
+              intervalHours={data.ethFunding.intervalHours}
+              loading={data.ethFunding.loading}
+              error={data.ethFunding.error}
+            />
+          </div>
+          <div
+            className="mt-3 rounded-lg p-3 flex gap-2.5"
+            style={{
+              background: "oklch(0.785 0.135 200 / 0.06)",
+              border: "1px solid oklch(0.785 0.135 200 / 0.15)",
+            }}
+          >
+            <svg
+              role="img"
+              aria-label="Info"
+              className="w-3.5 h-3.5 shrink-0 mt-0.5"
+              viewBox="0 0 16 16"
+              fill="none"
+              style={{ color: "oklch(0.785 0.135 200)" }}
+            >
+              <title>Info</title>
+              <circle
+                cx="8"
+                cy="8"
+                r="7"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              />
+              <path
+                d="M8 7v4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+              <circle cx="8" cy="5" r="0.75" fill="currentColor" />
+            </svg>
+            <div className="flex flex-col gap-1.5 min-w-0">
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {[
+                  {
+                    label: "Bearish",
+                    color: "oklch(0.637 0.220 25)",
+                    text: " — rate > 0: longs pay shorts, market is overheated",
+                  },
+                  {
+                    label: "Bullish",
+                    color: "oklch(0.723 0.185 150)",
+                    text: " — rate < 0: shorts pay longs, bearish bias = bullish signal",
+                  },
+                  {
+                    label: "Neutral",
+                    color: "oklch(0.600 0.015 240)",
+                    text: " — rate ≈ 0: market is balanced, no directional pressure",
+                  },
+                ].map((item) => (
+                  <span
+                    key={item.label}
+                    className="flex items-center gap-1 text-[11px]"
+                  >
+                    <span
+                      className="inline-block w-2 h-2 rounded-full shrink-0"
+                      style={{ background: item.color }}
+                    />
+                    <span
+                      style={{ color: item.color }}
+                      className="font-semibold"
+                    >
+                      {item.label}
+                    </span>
+                    <span style={{ color: "oklch(0.500 0.015 240)" }}>
+                      {item.text}
+                    </span>
+                  </span>
+                ))}
+              </div>
+              <p
+                className="text-[10px]"
+                style={{ color: "oklch(0.420 0.015 240)" }}
+              >
+                Settlement intervals follow exchange schedule. Funding payments
+                occur between longs and shorts — not charged by the exchange.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* Crypto Market Cap */}
         <section data-ocid="analysis.section.marketcap">
           <SectionHeader
@@ -2062,160 +2169,6 @@ export function AnalysisPanel() {
           </div>
         </section>
 
-        {/* Funding Rates */}
-        <section data-ocid="analysis.section.funding">
-          <SectionHeader
-            title="Crypto Derivatives — Funding Rates"
-            badge="Binance"
-          />
-          <div className="flex flex-col sm:flex-row gap-4">
-            <FundingCard
-              asset="BTC"
-              rate={data.btcFunding.rate}
-              nextSettlement={data.btcFunding.nextSettlement}
-              intervalHours={data.btcFunding.intervalHours}
-              loading={data.btcFunding.loading}
-              error={data.btcFunding.error}
-            />
-            <FundingCard
-              asset="ETH"
-              rate={data.ethFunding.rate}
-              nextSettlement={data.ethFunding.nextSettlement}
-              intervalHours={data.ethFunding.intervalHours}
-              loading={data.ethFunding.loading}
-              error={data.ethFunding.error}
-            />
-          </div>
-          <div
-            className="mt-3 rounded-lg p-3 flex gap-2.5"
-            style={{
-              background: "oklch(0.785 0.135 200 / 0.06)",
-              border: "1px solid oklch(0.785 0.135 200 / 0.15)",
-            }}
-          >
-            <svg
-              role="img"
-              aria-label="Info"
-              className="w-3.5 h-3.5 shrink-0 mt-0.5"
-              viewBox="0 0 16 16"
-              fill="none"
-              style={{ color: "oklch(0.785 0.135 200)" }}
-            >
-              <title>Info</title>
-              <circle
-                cx="8"
-                cy="8"
-                r="7"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              />
-              <path
-                d="M8 7v4"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-              <circle cx="8" cy="5" r="0.75" fill="currentColor" />
-            </svg>
-            <div className="flex flex-col gap-1.5 min-w-0">
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                {[
-                  {
-                    label: "Bearish",
-                    color: "oklch(0.637 0.220 25)",
-                    text: " — rate > 0: longs pay shorts, market is overheated",
-                  },
-                  {
-                    label: "Bullish",
-                    color: "oklch(0.723 0.185 150)",
-                    text: " — rate < 0: shorts pay longs, bearish bias = bullish signal",
-                  },
-                  {
-                    label: "Neutral",
-                    color: "oklch(0.600 0.015 240)",
-                    text: " — rate ≈ 0: market is balanced, no directional pressure",
-                  },
-                ].map((item) => (
-                  <span
-                    key={item.label}
-                    className="flex items-center gap-1 text-[11px]"
-                  >
-                    <span
-                      className="inline-block w-2 h-2 rounded-full shrink-0"
-                      style={{ background: item.color }}
-                    />
-                    <span
-                      style={{ color: item.color }}
-                      className="font-semibold"
-                    >
-                      {item.label}
-                    </span>
-                    <span style={{ color: "oklch(0.500 0.015 240)" }}>
-                      {item.text}
-                    </span>
-                  </span>
-                ))}
-              </div>
-              <p
-                className="text-[10px]"
-                style={{ color: "oklch(0.420 0.015 240)" }}
-              >
-                Settlement intervals follow exchange schedule. Funding payments
-                occur between longs and shorts — not charged by the exchange.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Open Interest */}
-        <section data-ocid="analysis.section.oi">
-          <SectionHeader title="Open Interest" badge="Binance + Bybit + OKX" />
-          <div className="flex flex-col sm:flex-row gap-4">
-            <OICard asset="BTC" data={data.btcOI} />
-            <OICard asset="ETH" data={data.ethOI} />
-          </div>
-          <p
-            className="mt-3 text-[11px] italic"
-            style={{ color: "oklch(0.500 0.015 240)" }}
-          >
-            Open Interest = total value of all active futures/swap contracts.
-            Rising OI with price = trend confirmation. Falling OI = position
-            unwinding.
-          </p>
-        </section>
-
-        {/* Global Open Interest — Multi-exchange aggregation */}
-        <section data-ocid="analysis.section.global_oi">
-          <SectionHeader
-            title="Open Interest (Global)"
-            subtitle="Aggregated across Binance, Bybit & OKX"
-            badge="Multi-Exchange"
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <GlobalOICard
-              asset="BTC"
-              oiUsd={globalOI.btcOI}
-              sources={globalOI.btcSources}
-              loading={globalOI.loading}
-              error={globalOI.error}
-            />
-            <GlobalOICard
-              asset="ETH"
-              oiUsd={globalOI.ethOI}
-              sources={globalOI.ethSources}
-              loading={globalOI.loading}
-              error={globalOI.error}
-            />
-          </div>
-          <p
-            className="mt-2 text-[10px] italic"
-            style={{ color: "oklch(0.420 0.015 240)" }}
-          >
-            Aggregated open interest from Binance, Bybit, and OKX perpetual futures.
-            Matches CoinMarketCap / CryptoBubbles methodology. Refreshes every minute.
-          </p>
-        </section>
-
         {/* BTC Social Sentiment */}
         <section data-ocid="analysis.section.social">
           <SectionHeader title="BTC Social Sentiment" badge="CoinGecko" />
@@ -2306,9 +2259,6 @@ export function AnalysisPanel() {
 
         {/* On-Chain Data */}
         <OnChainSection />
-
-        {/* Derivatives & Market Structure */}
-        <DerivativesSection />
       </div>
     </div>
   );
