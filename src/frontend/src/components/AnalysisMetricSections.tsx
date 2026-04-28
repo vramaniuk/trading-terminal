@@ -2,7 +2,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import {
   Activity,
-  AlertTriangle,
   BarChart2,
   Bitcoin,
   DollarSign,
@@ -712,8 +711,231 @@ export function OnChainSection() {
 }
 
 // =========================================================
+// SECTION 1.5: SPOT VOLUME (CoinGecko Aggregated)
+// =========================================================
+
+interface VolumeDataPoint {
+  date: string;
+  volume: number;
+  price: number | null;
+}
+
+interface VolumeChartProps {
+  asset: "bitcoin" | "ethereum";
+  title: string;
+  color: string;
+}
+
+function VolumeChart({ asset, title, color }: VolumeChartProps) {
+  const [data, setData] = useState<VolumeDataPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [days, setDays] = useState(30);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+      const res = await fetch(`${BACKEND_API}/api/analysis/volume-chart/${asset}?days=${days}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const result = await res.json();
+      setData(result.data || []);
+    } catch {
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [asset, days]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const currentVolume = data.length > 0 ? data[data.length - 1].volume : 0;
+  const prevVolume = data.length > 1 ? data[data.length - 2].volume : currentVolume;
+  const change24h = prevVolume ? ((currentVolume - prevVolume) / prevVolume) * 100 : 0;
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
+  const formatVolume = (n: number): string => {
+    if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+    if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+    if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+    if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+    return `$${n.toFixed(0)}`;
+  };
+
+  return (
+    <div
+      className="rounded-xl p-4 flex flex-col gap-3 min-w-0"
+      style={{
+        background: "oklch(0.155 0.020 240)",
+        border: "1px solid oklch(1 0 0 / 0.08)",
+        minHeight: "500px",
+      }}
+    >
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            style={{
+              background: `${color} / 0.12`,
+              color,
+            }}
+          >
+            <BarChart2 className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <div className="text-xs font-semibold" style={{ color: C_FG }}>
+              {title}
+            </div>
+            <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
+              Spot Volume — All Exchanges (CoinGecko)
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {!loading && data.length > 0 && (
+            <div className="flex items-center gap-2 mr-3">
+              <span className="text-sm font-mono font-bold" style={{ color: C_FG }}>
+                {formatVolume(currentVolume)}
+              </span>
+              <span
+                className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                style={{
+                  background: change24h >= 0 ? `${C_GREEN} / 0.15` : `${C_RED} / 0.15`,
+                  color: change24h >= 0 ? C_GREEN : C_RED,
+                }}
+              >
+                {change24h >= 0 ? "+" : ""}{change24h.toFixed(1)}%
+              </span>
+            </div>
+          )}
+
+          <div className="flex bg-black/20 rounded-lg p-0.5">
+            {[7, 30, 90].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDays(d)}
+                className="px-2 py-1 text-[10px] font-medium rounded-md transition-colors"
+                style={{
+                  background: days === d ? "oklch(0.3 0.02 240)" : "transparent",
+                  color: days === d ? C_FG : C_DIM,
+                }}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <Skeleton className="h-48 w-full rounded-lg" style={{ background: "oklch(1 0 0 / 0.06)" }} />
+      ) : data.length > 0 ? (
+        <div className="h-48">
+          <ChartContainer config={{ volume: { label: "Volume", color } }}>
+            <AreaChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+              <defs>
+                <linearGradient id={`volGrad-${asset}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={color} stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+              <XAxis
+                dataKey="date"
+                tickFormatter={formatDate}
+                tick={{ fill: C_DIM, fontSize: 10, fontFamily: "monospace" }}
+                axisLine={{ stroke: "oklch(1 0 0 / 0.1)" }}
+                tickLine={false}
+                minTickGap={30}
+              />
+              <YAxis
+                tick={{ fill: C_DIM, fontSize: 10, fontFamily: "monospace" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => formatVolume(v)}
+                width={60}
+              />
+              <ChartTooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  const p = payload[0].payload as VolumeDataPoint;
+                  return (
+                    <div
+                      className="rounded-lg px-3 py-2 text-xs"
+                      style={{
+                        background: "oklch(0.155 0.020 240)",
+                        border: "1px solid oklch(1 0 0 / 0.1)",
+                      }}
+                    >
+                      <div style={{ color: C_DIM }}>{formatDate(p.date)}</div>
+                      <div className="font-mono font-semibold" style={{ color }}>
+                        {formatVolume(p.volume)}
+                      </div>
+                      {p.price && (
+                        <div className="font-mono text-[10px]" style={{ color: C_MID }}>
+                          Price: ${p.price.toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }}
+              />
+              <Area
+                type="monotone"
+                dataKey="volume"
+                stroke={color}
+                strokeWidth={2}
+                fill={`url(#volGrad-${asset})`}
+                isAnimationActive={false}
+              />
+            </AreaChart>
+          </ChartContainer>
+        </div>
+      ) : (
+        <div className="h-48 flex items-center justify-center text-[11px]" style={{ color: C_DIM }}>
+          No volume data available
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function VolumeSection() {
+  return (
+    <section data-ocid="analysis.section.volume" className="mb-8">
+      <MetricSectionHeader
+        title="Global Spot Volume"
+        subtitle="24h trading volume aggregated across all major exchanges"
+        badge="CoinGecko"
+      />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <VolumeChart asset="bitcoin" title="BTC Volume" color="oklch(0.820 0.160 60)" />
+        <VolumeChart asset="ethereum" title="ETH Volume" color="oklch(0.785 0.135 280)" />
+      </div>
+    </section>
+  );
+}
+
+// =========================================================
 // SECTION 2: DERIVATIVES & MARKET STRUCTURE
 // =========================================================
+
+interface CoinVolumeData {
+  name: string;
+  symbol: string;
+  price: number | null;
+  change1h: number | null;
+  change24h: number | null;
+  change7d: number | null;
+  marketCap: number | null;
+  volume24h: number | null;
+}
 
 interface DerivativesData {
   longShortRatio: number | null;
@@ -721,8 +943,8 @@ interface DerivativesData {
   shortPct: number | null;
   takerBuySellRatio: number | null;
   putCallRatio: number | null;
-  btcOiUsd: number | null; // from Bybit + OKX
-  btcMktCap: number | null; // from CoinGecko (passed in via prop or fetched)
+  btcData: CoinVolumeData;
+  ethData: CoinVolumeData;
   loading: boolean;
 }
 
@@ -733,8 +955,8 @@ function useDerivativesData(): DerivativesData {
     shortPct: null,
     takerBuySellRatio: null,
     putCallRatio: null,
-    btcOiUsd: null,
-    btcMktCap: null,
+    btcData: { name: "Bitcoin", symbol: "BTC", price: null, change1h: null, change24h: null, change7d: null, marketCap: null, volume24h: null },
+    ethData: { name: "Ethereum", symbol: "ETH", price: null, change1h: null, change24h: null, change7d: null, marketCap: null, volume24h: null },
     loading: true,
   });
   const mountedRef = useRef(true);
@@ -779,29 +1001,63 @@ function useDerivativesData(): DerivativesData {
       /* ignore */
     }
 
-    // BTC Open Interest in USD from CoinMetrics
+    // BTC data from CoinGecko
     try {
       const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
-      const res = await window.fetch(`${BACKEND_API}/api/analysis/open-interest?asset=btc`);
+      const res = await window.fetch(`${BACKEND_API}/api/analysis/coingecko-coin/bitcoin`);
       if (res.ok) {
         const json = await res.json() as {
-          latest?: { value_usd?: number };
+          market_data?: {
+            current_price?: { usd?: number };
+            market_cap?: { usd?: number };
+            total_volume?: { usd?: number };
+            price_change_percentage_1h_in_currency?: { usd?: number };
+            price_change_percentage_24h_in_currency?: { usd?: number };
+            price_change_percentage_7d_in_currency?: { usd?: number };
+          };
         };
-        const oiVal = json.latest?.value_usd;
-        if (Number.isFinite(oiVal) && (oiVal as number) > 0) results.btcOiUsd = oiVal;
+        const md = json.market_data;
+        results.btcData = {
+          name: "Bitcoin",
+          symbol: "BTC",
+          price: md?.current_price?.usd ?? null,
+          change1h: md?.price_change_percentage_1h_in_currency?.usd ?? null,
+          change24h: md?.price_change_percentage_24h_in_currency?.usd ?? null,
+          change7d: md?.price_change_percentage_7d_in_currency?.usd ?? null,
+          marketCap: md?.market_cap?.usd ?? null,
+          volume24h: md?.total_volume?.usd ?? null,
+        };
       }
     } catch {
       /* ignore */
     }
 
-    // BTC Market Cap from CoinGecko for leverage ratio
+    // ETH data from CoinGecko
     try {
       const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
-      const res = await window.fetch(`${BACKEND_API}/api/analysis/coingecko-coin/bitcoin`);
+      const res = await window.fetch(`${BACKEND_API}/api/analysis/coingecko-coin/ethereum`);
       if (res.ok) {
-        const json = await res.json() as { market_data?: { market_cap?: { usd?: number } } };
-        const cap = json.market_data?.market_cap?.usd;
-        if (cap && Number.isFinite(cap)) results.btcMktCap = cap;
+        const json = await res.json() as {
+          market_data?: {
+            current_price?: { usd?: number };
+            market_cap?: { usd?: number };
+            total_volume?: { usd?: number };
+            price_change_percentage_1h_in_currency?: { usd?: number };
+            price_change_percentage_24h_in_currency?: { usd?: number };
+            price_change_percentage_7d_in_currency?: { usd?: number };
+          };
+        };
+        const md = json.market_data;
+        results.ethData = {
+          name: "Ethereum",
+          symbol: "ETH",
+          price: md?.current_price?.usd ?? null,
+          change1h: md?.price_change_percentage_1h_in_currency?.usd ?? null,
+          change24h: md?.price_change_percentage_24h_in_currency?.usd ?? null,
+          change7d: md?.price_change_percentage_7d_in_currency?.usd ?? null,
+          marketCap: md?.market_cap?.usd ?? null,
+          volume24h: md?.total_volume?.usd ?? null,
+        };
       }
     } catch {
       /* ignore */
@@ -856,16 +1112,6 @@ function useDerivativesData(): DerivativesData {
 export function DerivativesSection() {
   const d = useDerivativesData();
 
-  // Leverage ratio: OI / market cap
-  let leverageCategory: "High" | "Medium" | "Low" | null = null;
-  let leveragePct: number | null = null;
-  if (d.btcOiUsd != null && d.btcMktCap != null && d.btcMktCap > 0) {
-    leveragePct = (d.btcOiUsd / d.btcMktCap) * 100;
-    if (leveragePct > 3) leverageCategory = "High";
-    else if (leveragePct > 1) leverageCategory = "Medium";
-    else leverageCategory = "Low";
-  }
-
   const lsSignal = (): { signal: MetricCardProps["signal"]; text: string } => {
     if (d.longShortRatio == null)
       return { signal: "unavailable", text: "Data unavailable" };
@@ -899,32 +1145,18 @@ export function DerivativesSection() {
     return { signal: "neutral", text: "Balanced options positioning" };
   };
 
-  const levSignal = (): { signal: MetricCardProps["signal"]; text: string } => {
-    if (leverageCategory === null)
-      return { signal: "unavailable", text: "Data unavailable" };
-    if (leverageCategory === "High")
-      return {
-        signal: "warning",
-        text: "High leverage — liquidation risk elevated",
-      };
-    if (leverageCategory === "Medium")
-      return { signal: "neutral", text: "Moderate leverage — healthy range" };
-    return { signal: "bullish", text: "Low leverage — less liquidation risk" };
-  };
-
   const ls = lsSignal();
   const ts = takerSignal();
   const pc = pcSignal();
-  const lev = levSignal();
 
   return (
     <section data-ocid="analysis.section.derivatives">
       <MetricSectionHeader
         title="Derivatives & Market Structure"
-        subtitle="Futures positioning and options sentiment"
-        badge="Binance / Deribit"
+        subtitle="Futures positioning, options sentiment, and spot volume"
+        badge="Binance / Deribit / CoinGecko"
       />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
         {/* Long/Short Ratio */}
         <div
           className="rounded-xl p-4 flex flex-col gap-2 min-w-0"
@@ -1047,7 +1279,7 @@ export function DerivativesSection() {
           badge="Deribit"
         />
 
-        {/* Estimated Leverage Ratio */}
+        {/* BTC Volume Card */}
         <div
           className="rounded-xl p-4 flex flex-col gap-2 min-w-0"
           style={CARD_STYLE}
@@ -1060,68 +1292,119 @@ export function DerivativesSection() {
                 color: C_CYAN,
               }}
             >
-              <AlertTriangle className="w-3.5 h-3.5" />
+              <Bitcoin className="w-3.5 h-3.5" />
             </div>
             <div>
               <div className="text-xs font-semibold" style={{ color: C_FG }}>
-                Leverage Ratio
+                {d.btcData.name}
               </div>
               <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
-                BTC OI / market cap
+                {d.btcData.symbol}
               </div>
             </div>
           </div>
           {d.loading ? (
             <Skeleton
-              className="h-8 w-20 rounded"
+              className="h-8 w-24 rounded"
               style={{ background: "oklch(1 0 0 / 0.06)" }}
             />
           ) : (
             <div
-              className="font-mono font-bold text-xl"
-              style={{
-                color:
-                  leverageCategory === "High"
-                    ? C_YELLOW
-                    : leverageCategory === "Medium"
-                      ? C_FG
-                      : leverageCategory === "Low"
-                        ? C_GREEN
-                        : C_DIM,
-              }}
+              className="font-mono font-bold text-lg"
+              style={{ color: C_FG }}
             >
-              {leverageCategory ?? "Unavailable"}
-            </div>
-          )}
-          {!d.loading && leveragePct !== null && (
-            <div className="text-[11px] font-mono" style={{ color: C_MID }}>
-              {leveragePct.toFixed(2)}% OI-to-cap
+              {d.btcData.price != null
+                ? `$${d.btcData.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : "Unavailable"}
             </div>
           )}
           {!d.loading && (
-            <div
-              className="text-[11px] font-semibold px-2 py-1 rounded-lg w-fit"
-              style={{
-                background:
-                  leverageCategory === "High"
-                    ? "oklch(0.820 0.160 90 / 0.10)"
-                    : leverageCategory === "Low"
-                      ? "oklch(0.723 0.185 150 / 0.10)"
-                      : "oklch(0.155 0.020 240)",
-                color:
-                  leverageCategory === "High"
-                    ? C_YELLOW
-                    : leverageCategory === "Low"
-                      ? C_GREEN
-                      : C_DIM,
-              }}
-            >
-              {lev.text}
+            <div className="flex gap-2 text-[10px] font-mono">
+              <span style={{ color: (d.btcData.change1h ?? 0) >= 0 ? C_GREEN : C_RED }}>
+                1h: {(d.btcData.change1h ?? 0).toFixed(2)}%
+              </span>
+              <span style={{ color: (d.btcData.change24h ?? 0) >= 0 ? C_GREEN : C_RED }}>
+                24h: {(d.btcData.change24h ?? 0).toFixed(2)}%
+              </span>
+              <span style={{ color: (d.btcData.change7d ?? 0) >= 0 ? C_GREEN : C_RED }}>
+                7d: {(d.btcData.change7d ?? 0).toFixed(2)}%
+              </span>
             </div>
           )}
-          <div className="text-[10px] italic" style={{ color: C_DIM }}>
-            {"OI >3% mkt cap = High. 1–3% = Medium. <1% = Low risk."}
+          {!d.loading && d.btcData.marketCap != null && (
+            <div className="text-[10px] font-mono" style={{ color: C_MID }}>
+              Cap: {fmtBigNum(d.btcData.marketCap)}
+            </div>
+          )}
+          {!d.loading && d.btcData.volume24h != null && (
+            <div className="text-[11px] font-semibold px-2 py-1 rounded-lg w-fit" style={{ background: "oklch(0.155 0.020 240)", color: C_CYAN }}>
+              Vol 24h: {fmtBigNum(d.btcData.volume24h)}
+            </div>
+          )}
+        </div>
+
+        {/* ETH Volume Card */}
+        <div
+          className="rounded-xl p-4 flex flex-col gap-2 min-w-0"
+          style={CARD_STYLE}
+        >
+          <div className="flex items-center gap-2">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+              style={{
+                background: "oklch(0.620 0.140 280 / 0.12)",
+                color: "oklch(0.720 0.140 280)",
+              }}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold" style={{ color: C_FG }}>
+                {d.ethData.name}
+              </div>
+              <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
+                {d.ethData.symbol}
+              </div>
+            </div>
           </div>
+          {d.loading ? (
+            <Skeleton
+              className="h-8 w-24 rounded"
+              style={{ background: "oklch(1 0 0 / 0.06)" }}
+            />
+          ) : (
+            <div
+              className="font-mono font-bold text-lg"
+              style={{ color: C_FG }}
+            >
+              {d.ethData.price != null
+                ? `$${d.ethData.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : "Unavailable"}
+            </div>
+          )}
+          {!d.loading && (
+            <div className="flex gap-2 text-[10px] font-mono">
+              <span style={{ color: (d.ethData.change1h ?? 0) >= 0 ? C_GREEN : C_RED }}>
+                1h: {(d.ethData.change1h ?? 0).toFixed(2)}%
+              </span>
+              <span style={{ color: (d.ethData.change24h ?? 0) >= 0 ? C_GREEN : C_RED }}>
+                24h: {(d.ethData.change24h ?? 0).toFixed(2)}%
+              </span>
+              <span style={{ color: (d.ethData.change7d ?? 0) >= 0 ? C_GREEN : C_RED }}>
+                7d: {(d.ethData.change7d ?? 0).toFixed(2)}%
+              </span>
+            </div>
+          )}
+          {!d.loading && d.ethData.marketCap != null && (
+            <div className="text-[10px] font-mono" style={{ color: C_MID }}>
+              Cap: {fmtBigNum(d.ethData.marketCap)}
+            </div>
+          )}
+          {!d.loading && d.ethData.volume24h != null && (
+            <div className="text-[11px] font-semibold px-2 py-1 rounded-lg w-fit" style={{ background: "oklch(0.155 0.020 240)", color: "oklch(0.720 0.140 280)" }}>
+              Vol 24h: {fmtBigNum(d.ethData.volume24h)}
+            </div>
+          )}
         </div>
       </div>
 

@@ -12,8 +12,7 @@ import type {
   OpenInterestState,
 } from "../hooks/useAnalysisData";
 import { useAnalysisData } from "../hooks/useAnalysisData";
-import { DerivativesSection, OnChainSection } from "./AnalysisMetricSections";
-import { ExchangeBalanceTable } from "./ExchangeBalanceTable";
+import { DerivativesSection, OnChainSection, VolumeSection } from "./AnalysisMetricSections";
 import { SectorPerformance } from "./SectorPerformance";
 
 // ---- Stablecoin exclusion set ----
@@ -1438,10 +1437,10 @@ function useGlobalOI(): GlobalOIState {
     try {
       const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
       
-      // Fetch BTC and ETH OI from backend
+      // Fetch BTC and ETH OI from backend (aggregated from Binance + Bybit + OKX)
       const [btcRes, ethRes] = await Promise.allSettled([
-        fetch(`${BACKEND_API}/api/analysis/open-interest?asset=btc`),
-        fetch(`${BACKEND_API}/api/analysis/open-interest?asset=eth`),
+        fetch(`${BACKEND_API}/api/analysis/open-interest/BTCUSDT`),
+        fetch(`${BACKEND_API}/api/analysis/open-interest/ETHUSDT`),
       ]);
 
       let btcOI = 0;
@@ -1450,18 +1449,18 @@ function useGlobalOI(): GlobalOIState {
       const ethSources: string[] = [];
 
       if (btcRes.status === "fulfilled" && btcRes.value.ok) {
-        const btcData = await btcRes.value.json();
-        if (btcData.latest?.value_usd) {
-          btcOI = btcData.latest.value_usd;
-          btcSources.push("Bybit", "OKX");
+        const btcData = (await btcRes.value.json()) as { oiUsd?: number; sources?: string[]; aggregated?: boolean };
+        if (btcData.oiUsd && btcData.oiUsd > 0) {
+          btcOI = btcData.oiUsd;
+          btcSources.push(...(btcData.sources || ["Binance", "Bybit", "OKX"]));
         }
       }
 
       if (ethRes.status === "fulfilled" && ethRes.value.ok) {
-        const ethData = await ethRes.value.json();
-        if (ethData.latest?.value_usd) {
-          ethOI = ethData.latest.value_usd;
-          ethSources.push("Bybit", "OKX");
+        const ethData = (await ethRes.value.json()) as { oiUsd?: number; sources?: string[]; aggregated?: boolean };
+        if (ethData.oiUsd && ethData.oiUsd > 0) {
+          ethOI = ethData.oiUsd;
+          ethSources.push(...(ethData.sources || ["Binance", "Bybit", "OKX"]));
         }
       }
 
@@ -1484,7 +1483,7 @@ function useGlobalOI(): GlobalOIState {
 
   useEffect(() => {
     fetchOI();
-    timerRef.current = setInterval(fetchOI, 300_000);
+    timerRef.current = setInterval(fetchOI, 60_000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -1694,10 +1693,8 @@ function GlobalOICard({
 // ---- Main AnalysisPanel ----
 export function AnalysisPanel() {
   const data = useAnalysisData();
-  const vol = useBinanceVolume();
   const mktCap = useMarketCapMetrics();
   const topMovers = useTopMovers();
-  const globalVol = useGlobalSpotVolume();
   const globalOI = useGlobalOI();
   const fngCountdown = useFngCountdown(data.fearGreed.timeUntilUpdate);
   const { fearGreed } = data;
@@ -1860,102 +1857,8 @@ export function AnalysisPanel() {
             )}
         </section>
 
-        {/* Exchange Volume */}
-        <section data-ocid="analysis.section.volume">
-          <SectionHeader
-            title="Exchange Volume (24h)"
-            subtitle="Crypto Spot — Binance USDT pairs"
-            badge="Live"
-          />
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-            <VolumeCard
-              label="Spot Volume (Crypto)"
-              sublabel="All USDT pairs — non-stable"
-              value={vol.spot}
-              pct={100}
-              color="oklch(0.723 0.185 150)"
-              bgColor="oklch(0.723 0.185 150 / 0.12)"
-              loading={vol.loading}
-              error={vol.error}
-              icon={<DollarSign className="w-3.5 h-3.5" />}
-            />
-            <div
-              className="rounded-xl p-4 flex flex-col gap-2 flex-1 min-w-0 sm:max-w-[200px]"
-              style={{
-                background: "oklch(0.148 0.018 240)",
-                border: "1px solid oklch(1 0 0 / 0.08)",
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                  style={{
-                    background: "oklch(0.820 0.160 90 / 0.12)",
-                    color: "oklch(0.820 0.160 90)",
-                  }}
-                >
-                  <BarChart2 className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div
-                    className="text-xs font-semibold"
-                    style={{ color: "oklch(0.910 0.015 240)" }}
-                  >
-                    Source
-                  </div>
-                  <div
-                    className="text-[10px] font-mono"
-                    style={{ color: "oklch(0.450 0.015 240)" }}
-                  >
-                    Binance spot
-                  </div>
-                </div>
-              </div>
-              <div
-                className="font-mono font-bold text-base mt-0.5"
-                style={{ color: "oklch(0.785 0.135 200)" }}
-              >
-                Binance
-              </div>
-              <p
-                className="text-[10px] italic"
-                style={{ color: "oklch(0.450 0.015 240)" }}
-              >
-                Updates every 30s
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Global Spot Volume (CoinGecko) */}
-        <section data-ocid="analysis.section.global_volume">
-          <SectionHeader
-            title="Global Spot Volume (24h)"
-            subtitle="BTC & ETH across all exchanges"
-            badge="CoinGecko"
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <GlobalVolumeCard
-              asset="BTC"
-              volume={globalVol.btcVolume}
-              loading={globalVol.loading}
-              error={globalVol.error}
-            />
-            <GlobalVolumeCard
-              asset="ETH"
-              volume={globalVol.ethVolume}
-              loading={globalVol.loading}
-              error={globalVol.error}
-            />
-          </div>
-          <p
-            className="mt-2 text-[10px] italic"
-            style={{ color: "oklch(0.420 0.015 240)" }}
-          >
-            Total 24h spot trading volume across all exchanges — source:
-            CoinGecko. Refreshes every 2 minutes.
-          </p>
-        </section>
+        {/* Global Spot Volume with Charts */}
+        <VolumeSection />
 
         {/* Market Sentiment */}
         <section data-ocid="analysis.section.sentiment">
@@ -2266,7 +2169,7 @@ export function AnalysisPanel() {
 
         {/* Open Interest */}
         <section data-ocid="analysis.section.oi">
-          <SectionHeader title="Open Interest" badge="Bybit + OKX" />
+          <SectionHeader title="Open Interest" badge="Binance + Bybit + OKX" />
           <div className="flex flex-col sm:flex-row gap-4">
             <OICard asset="BTC" data={data.btcOI} />
             <OICard asset="ETH" data={data.ethOI} />
@@ -2281,11 +2184,11 @@ export function AnalysisPanel() {
           </p>
         </section>
 
-        {/* Global Open Interest — Bybit + OKX aggregation */}
+        {/* Global Open Interest — Multi-exchange aggregation */}
         <section data-ocid="analysis.section.global_oi">
           <SectionHeader
             title="Open Interest (Global)"
-            subtitle="Aggregated across Bybit & OKX"
+            subtitle="Aggregated across Binance, Bybit & OKX"
             badge="Multi-Exchange"
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -2308,8 +2211,8 @@ export function AnalysisPanel() {
             className="mt-2 text-[10px] italic"
             style={{ color: "oklch(0.420 0.015 240)" }}
           >
-            Aggregated open interest from major perpetual futures exchanges.
-            Refreshes every 5 minutes.
+            Aggregated open interest from Binance, Bybit, and OKX perpetual futures.
+            Matches CoinMarketCap / CryptoBubbles methodology. Refreshes every minute.
           </p>
         </section>
 
@@ -2403,17 +2306,6 @@ export function AnalysisPanel() {
 
         {/* On-Chain Data */}
         <OnChainSection />
-
-        {/* Exchange Balances */}
-        <section data-ocid="analysis.section.exchange-balances">
-          <ExchangeBalanceTable />
-          <p
-            className="mt-2 text-[10px] italic"
-            style={{ color: "oklch(0.420 0.015 240)" }}
-          >
-            Historical balance data for major exchanges. Shows BTC and ETH reserves with percentage changes.
-          </p>
-        </section>
 
         {/* Derivatives & Market Structure */}
         <DerivativesSection />

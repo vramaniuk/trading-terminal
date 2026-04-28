@@ -5,6 +5,8 @@ const router = express.Router();
 
 const CORSPROXY = 'https://corsproxy.io/?url=';
 const BINANCE_FAPI = 'https://fapi.binance.com';
+const BYBIT_API = 'https://api.bybit.com';
+const OKX_API = 'https://www.okx.com';
 const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY;
 
 function proxiedGet(url) {
@@ -85,25 +87,118 @@ router.get('/btc-social', async (req, res) => {
   }
 });
 
-// Open Interest
+// Fetch OI from Binance
+async function fetchBinanceOI(symbol) {
+  const oiUrl = `${BINANCE_FAPI}/fapi/v1/openInterest?symbol=${symbol}`;
+  const historyUrl = `${BINANCE_FAPI}/futures/data/openInterestHist?symbol=${symbol}&period=1h&limit=48`;
+  
+  try {
+    const [oiRes, historyRes] = await Promise.all([
+      axios.get(oiUrl, { timeout: 5000 }).catch(() => axios.get(proxiedGet(oiUrl), { timeout: 5000 })),
+      axios.get(historyUrl, { timeout: 5000 }).catch(() => axios.get(proxiedGet(historyUrl), { timeout: 5000 }))
+    ]);
+    
+    const oiUsd = Number(oiRes.data.openInterestValue || oiRes.data.sumOpenInterestValue || 0);
+    const history = historyRes.data?.slice(-48).map(row => Number(row.sumOpenInterestValue || 0)) || [];
+    
+    return { oiUsd, source: 'Binance', history };
+  } catch (error) {
+    console.error('Binance OI fetch failed:', error.message);
+    return null;
+  }
+}
+
+// Fetch OI from Bybit
+async function fetchBybitOI(symbol) {
+  // Bybit API: /v5/market/tickers with category=linear for perpetuals
+  const symbolFormatted = symbol.replace('USDT', ''); // BTCUSDT -> BTC
+  const url = `${BYBIT_API}/v5/market/tickers?category=linear&symbol=${symbol}`;
+  
+  try {
+    const res = await axios.get(url, { timeout: 5000 }).catch(() => axios.get(proxiedGet(url), { timeout: 5000 }));
+    const ticker = res.data?.result?.list?.[0];
+    if (!ticker) return null;
+    
+    // openInterest is in coin units, convert to USD using lastPrice
+    const oiCcy = Number(ticker.openInterest || 0);
+    const price = Number(ticker.lastPrice || 0);
+    const oiUsd = oiCcy * price;
+    
+    return { oiUsd, source: 'Bybit' };
+  } catch (error) {
+    console.error('Bybit OI fetch failed:', error.message);
+    return null;
+  }
+}
+
+// Fetch OI from OKX
+async function fetchOkxOI(symbol) {
+  // OKX API: /api/v5/public/open-interest
+  const instId = symbol.replace('USDT', '-USDT-SWAP'); // BTCUSDT -> BTC-USDT-SWAP
+  const url = `${OKX_API}/api/v5/public/open-interest?instType=SWAP&instId=${instId}`;
+  
+  try {
+    const res = await axios.get(url, { timeout: 5000 }).catch(() => axios.get(proxiedGet(url), { timeout: 5000 }));
+    const data = res.data?.data?.[0];
+    if (!data) return null;
+    
+    // OKX returns OI in contracts, need to multiply by contract size and price
+    const oiUsd = Number(data.oiCcy || 0); // oiCcy is in USD terms
+    
+    return { oiUsd, source: 'OKX' };
+  } catch (error) {
+    console.error('OKX OI fetch failed:', error.message);
+    return null;
+  }
+}
+
+// Open Interest - Aggregated from multiple exchanges (like CoinMarketCap/CryptoBubbles)
 router.get('/open-interest/:symbol', async (req, res) => {
   try {
     const { symbol } = req.params;
-    const oiUrl = `${BINANCE_FAPI}/fapi/v1/openInterest?symbol=${symbol}`;
-    const historyUrl = `${BINANCE_FAPI}/futures/data/openInterestHist?symbol=${symbol}&period=1h&limit=48`;
     
-    const [oiRes, historyRes] = await Promise.all([
-      axios.get(oiUrl).catch(() => axios.get(proxiedGet(oiUrl))),
-      axios.get(historyUrl).catch(() => axios.get(proxiedGet(historyUrl)))
+    // Fetch from all exchanges in parallel
+    const [binanceData, bybitData, okxData] = await Promise.all([
+      fetchBinanceOI(symbol),
+      fetchBybitOI(symbol),
+      fetchOkxOI(symbol)
     ]);
     
-    const oiCcy = Number(oiRes.data.openInterest);
-    const oiUsd = Number(oiRes.data.openInterestValue || oiRes.data.notionalValue || 0);
-    const history = historyRes.data.slice(-48).map(row => Number(row.sumOpenInterestValue));
+    // Aggregate OI from all available sources
+    let totalOiUsd = 0;
+    const sources = [];
+    const sourceValues = {};
     
-    res.json({ oiUsd, oiCcy, history });
+    if (binanceData?.oiUsd > 0) {
+      totalOiUsd += binanceData.oiUsd;
+      sources.push('Binance');
+      sourceValues.binance = binanceData.oiUsd;
+    }
+    if (bybitData?.oiUsd > 0) {
+      totalOiUsd += bybitData.oiUsd;
+      sources.push('Bybit');
+      sourceValues.bybit = bybitData.oiUsd;
+    }
+    if (okxData?.oiUsd > 0) {
+      totalOiUsd += okxData.oiUsd;
+      sources.push('OKX');
+      sourceValues.okx = okxData.oiUsd;
+    }
+    
+    // Use history from Binance if available
+    const history = binanceData?.history || [];
+    
+    res.json({ 
+      oiUsd: totalOiUsd, 
+      oiCcy: 0, // Not aggregated per coin
+      history,
+      sources,
+      sourceValues,
+      aggregated: sources.length > 0
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch OI' });
+    console.error('Open Interest fetch error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch OI', details: error.message });
   }
 });
 
@@ -245,6 +340,53 @@ router.get('/coingecko-coin/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching coingecko coin:', error.message);
     res.status(500).json({ error: 'Failed to fetch coingecko coin data' });
+  }
+});
+
+// CoinGecko volume history for charts (aggregate from all exchanges)
+router.get('/volume-chart/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { days = 30 } = req.query;
+    const params = new URLSearchParams({
+      vs_currency: 'usd',
+      days: String(days),
+    });
+    if (COINGECKO_API_KEY) {
+      params.append('x_cg_demo_api_key', COINGECKO_API_KEY);
+    }
+    const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?${params.toString()}`;
+    const response = await axios.get(url, { timeout: 15000 }).catch(() =>
+      axios.get(proxiedGet(url), { timeout: 20000 })
+    );
+    
+    // Response contains: prices: [[timestamp, price], ...], market_caps: [...], total_volumes: [[timestamp, volume], ...]
+    const volumes = response.data?.total_volumes || [];
+    const prices = response.data?.prices || [];
+    
+    // Format data for chart - aggregate to daily points
+    const data = volumes.map((point, index) => ({
+      date: new Date(point[0]).toISOString().split('T')[0],
+      volume: point[1], // USD volume
+      price: prices[index]?.[1] || null,
+    }));
+    
+    // Downsample if too many points (keep ~30-60 points for display)
+    const downsampled = data.length > 60 
+      ? data.filter((_, i) => i % Math.ceil(data.length / 45) === 0)
+      : data;
+    
+    res.json({
+      asset: id,
+      metric: 'volume',
+      unit: 'USD',
+      description: `24h spot trading volume aggregated across all exchanges (CoinGecko)`,
+      days: Number(days),
+      data: downsampled,
+    });
+  } catch (error) {
+    console.error('Error fetching volume chart:', error.message);
+    res.status(500).json({ error: 'Failed to fetch volume data' });
   }
 });
 

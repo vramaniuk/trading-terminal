@@ -159,23 +159,24 @@ export async function fetchBtcSocial(): Promise<BtcSocialState> {
   };
 }
 
-// ---- Open Interest (Bybit + OKX) ----
+// ---- Open Interest (Binance + Bybit + OKX aggregated) ----
 export async function fetchOpenInterest(
   asset: string,
 ): Promise<OpenInterestState> {
-  const res = await fetch(`${BACKEND_API}/api/analysis/open-interest?asset=${asset}`);
+  const symbol = `${asset.toUpperCase()}USDT`;
+  const res = await fetch(`${BACKEND_API}/api/analysis/open-interest/${symbol}`);
   if (!res.ok) throw new Error("open interest");
-  const data = await res.json();
+  const data = (await res.json()) as { oiUsd?: number; history?: number[]; sources?: string[] };
   
   // Extract history data for sparkline
   const history = data.history || [];
   const downsampledHistory = history
-    .filter((_, i) => i % 1 === 0) // Take all points (already downsampled on backend)
+    .filter((_, i) => i % 1 === 0)
     .map((point: number) => point)
-    .slice(-48); // Last 48 points for sparkline
+    .slice(-48);
   
   return {
-    oiUsd: data.latest?.value_usd || 0,
+    oiUsd: data.oiUsd || 0,
     oiCcy: 0,
     history: downsampledHistory,
     loading: false,
