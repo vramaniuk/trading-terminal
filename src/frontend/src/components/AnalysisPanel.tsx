@@ -14,6 +14,7 @@ import type {
 import { useAnalysisData } from "../hooks/useAnalysisData";
 import { DerivativesSection, OnChainSection } from "./AnalysisMetricSections";
 import { WhaleTrackingSection } from "./WhaleTrackingSection";
+import { ExchangeBalanceTable } from "./ExchangeBalanceTable";
 
 // ---- Stablecoin exclusion set ----
 const STABLECOINS = new Set([
@@ -2505,6 +2506,18 @@ export function AnalysisPanel() {
 
         {/* Whale Tracking */}
         <WhaleTrackingSection />
+
+        {/* Exchange Balances */}
+        <section data-ocid="analysis.section.exchange-balances">
+          <SectionHeader title="Exchange Balances" subtitle="BTC & ETH reserves" />
+          <ExchangeBalanceTable />
+          <p
+            className="mt-2 text-[10px] italic"
+            style={{ color: "oklch(0.420 0.015 240)" }}
+          >
+            Historical balance data for major exchanges. Shows BTC and ETH reserves with percentage changes.
+          </p>
+        </section>
 
         {/* Derivatives & Market Structure */}
         <DerivativesSection />

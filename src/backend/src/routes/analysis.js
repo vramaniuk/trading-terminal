@@ -342,4 +342,46 @@ router.get('/btc/large-transactions', async (req, res) => {
   }
 });
 
+// Exchange balance history (mock data - replace with real API calls)
+router.get('/exchange-balances', async (req, res) => {
+  try {
+    const { exchange, asset, days = 30 } = req.query;
+    const numDays = parseInt(days);
+    
+    // Generate mock historical balance data
+    const data = [];
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    
+    // Base values for different exchanges and assets
+    const baseValues = {
+      binance: { btc: 500000, eth: 3500000 },
+      okx: { btc: 300000, eth: 2000000 },
+      bybit: { btc: 250000, eth: 1800000 },
+      coinbase: { btc: 400000, eth: 2800000 },
+      bitfinex: { btc: 150000, eth: 1200000 },
+      kraken: { btc: 180000, eth: 1400000 }
+    };
+    
+    const baseValue = baseValues[exchange]?.[asset] || 100000;
+    
+    for (let i = numDays; i >= 0; i--) {
+      const date = new Date(now - i * dayMs);
+      const randomVariation = 0.95 + Math.random() * 0.1; // ±5% variation
+      const trend = 1 + (numDays - i) * 0.002; // Slight upward trend
+      const value = baseValue * randomVariation * trend;
+      
+      data.push({
+        date: date.toISOString().split('T')[0],
+        value: Math.round(value)
+      });
+    }
+    
+    res.json({ exchange, asset, data });
+  } catch (error) {
+    console.error('Error fetching exchange balances:', error);
+    res.status(500).json({ error: 'Failed to fetch exchange balances' });
+  }
+});
+
 export default router;
