@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import {
   Activity,
   AlertTriangle,
@@ -8,11 +9,13 @@ import {
   Hash,
   Layers,
   Lock,
+  Pickaxe,
   TrendingDown,
   TrendingUp,
   Users,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Area, AreaChart, XAxis, YAxis } from "recharts";
 
 // ---- Shared card background style ----
 const CARD_STYLE: React.CSSProperties = {
@@ -314,8 +317,8 @@ interface OnChainData {
 interface BlockchainInfoStats {
   n_unique_addresses?: number;
   n_transactions?: number;
-  hash_rate?: number;
-  totalbc?: number;
+  hashrate?: number;  // in EH/s from backend
+  totalbc?: number;   // in satoshis
 }
 
 async function fetchBlockchainStats(): Promise<Partial<OnChainData>> {
@@ -330,8 +333,10 @@ async function fetchBlockchainStats(): Promise<Partial<OnChainData>> {
       if (addr != null && Number.isFinite(addr)) results.activeAddresses = addr;
       const txc = json.n_transactions;
       if (txc != null && Number.isFinite(txc)) results.txCount24h = txc;
-      const hr = json.hash_rate;
-      if (hr != null && Number.isFinite(hr)) results.hashRateEH = hr / 1_000_000;
+      // hashrate is already in EH/s from backend
+      const hr = json.hashrate;
+      if (hr != null && Number.isFinite(hr)) results.hashRateEH = hr;
+      // totalbc is in satoshis from blockchain.info, convert to BTC
       const supply = json.totalbc;
       if (supply != null && Number.isFinite(supply))
         results.circulatingSupplyBTC = supply / 1e8;
@@ -414,6 +419,170 @@ function useOnChainData(): OnChainData {
   }, [fetchMempool, fetchStats]);
 
   return state;
+}
+
+// ---- Hashrate Chart Component ----
+interface HashrateDataPoint {
+  date: string;
+  value: number;
+}
+
+function HashrateChart() {
+  const [data, setData] = useState<HashrateDataPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [days, setDays] = useState(30);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+      const res = await fetch(`${BACKEND_API}/api/analysis/hashrate-chart?days=${days}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const result = await res.json();
+      setData(result.data || []);
+    } catch {
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [days]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const currentHashrate = data.length > 0 ? data[data.length - 1].value : 0;
+  const prevHashrate = data.length > 1 ? data[data.length - 2].value : currentHashrate;
+  const change24h = prevHashrate ? ((currentHashrate - prevHashrate) / prevHashrate) * 100 : 0;
+
+  const chartConfig = {
+    value: {
+      label: "Hash Rate",
+      color: "oklch(0.723 0.185 150)",
+    },
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
+  return (
+    <div
+      className="rounded-xl p-4 flex flex-col gap-3 col-span-full lg:col-span-2"
+      style={{
+        background: "oklch(0.155 0.020 240)",
+        border: "1px solid oklch(1 0 0 / 0.08)",
+      }}
+    >
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            style={{
+              background: "oklch(0.785 0.135 200 / 0.12)",
+              color: C_CYAN,
+            }}
+          >
+            <Pickaxe className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <div className="text-xs font-semibold" style={{ color: C_FG }}>
+              Bitcoin Hash Rate
+            </div>
+            <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
+              Network mining power (EH/s)
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {!loading && data.length > 0 && (
+            <div className="flex items-center gap-2 mr-3">
+              <span className="text-sm font-mono font-bold" style={{ color: C_FG }}>
+                {currentHashrate.toFixed(2)} EH/s
+              </span>
+              <span
+                className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                style={{
+                  background: change24h >= 0 ? `${C_GREEN} / 0.15` : `${C_RED} / 0.15`,
+                  color: change24h >= 0 ? C_GREEN : C_RED,
+                }}
+              >
+                {change24h >= 0 ? "+" : ""}{change24h.toFixed(2)}%
+              </span>
+            </div>
+          )}
+          <div className="flex gap-1">
+            {[7, 30, 90, 180, 365].map((d) => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                className="px-2 py-0.5 text-[10px] font-medium rounded transition-colors"
+                style={{
+                  background: days === d ? "oklch(0.785 0.135 200 / 0.25)" : "oklch(1 0 0 / 0.05)",
+                  color: days === d ? C_CYAN : C_DIM,
+                }}
+              >
+                {d === 365 ? "1Y" : `${d}D`}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <Skeleton className="h-48 w-full rounded-lg" style={{ background: "oklch(1 0 0 / 0.06)" }} />
+      ) : data.length === 0 ? (
+        <div className="h-48 flex items-center justify-center text-xs" style={{ color: C_DIM }}>
+          Failed to load hashrate data
+        </div>
+      ) : (
+        <ChartContainer config={chartConfig} className="h-48 w-full">
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="hashrateGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="oklch(0.723 0.185 150)" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="oklch(0.723 0.185 150)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis
+              dataKey="date"
+              tickFormatter={formatDate}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10, fill: "oklch(0.450 0.015 240)" }}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10, fill: "oklch(0.450 0.015 240)" }}
+              tickFormatter={(value) => `${value.toFixed(0)}`}
+              domain={["auto", "auto"]}
+            />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(label) => formatDate(label as string)}
+                  formatter={(value) => [`${(value as number).toFixed(2)} EH/s`, "Hash Rate"]}
+                />
+              }
+            />
+            <Area
+              dataKey="value"
+              type="monotone"
+              stroke="oklch(0.723 0.185 150)"
+              strokeWidth={2}
+              fill="url(#hashrateGradient)"
+              dot={false}
+              activeDot={{ r: 4, fill: "oklch(0.723 0.185 150)" }}
+            />
+          </AreaChart>
+        </ChartContainer>
+      )}
+    </div>
+  );
 }
 
 export function OnChainSection() {
@@ -611,6 +780,9 @@ export function OnChainSection() {
         />
 
         {/* ── Glassnode-gated cards ── */}
+        {/* Hashrate Chart */}
+        <HashrateChart />
+
         <GlassnodeUnavailableCard
           title="Exchange Flows"
           subtitle="BTC net flow into/out of exchanges"

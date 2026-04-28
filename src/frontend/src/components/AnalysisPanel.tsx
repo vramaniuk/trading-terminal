@@ -13,7 +13,6 @@ import type {
 } from "../hooks/useAnalysisData";
 import { useAnalysisData } from "../hooks/useAnalysisData";
 import { DerivativesSection, OnChainSection } from "./AnalysisMetricSections";
-import { WhaleTrackingSection } from "./WhaleTrackingSection";
 import { ExchangeBalanceTable } from "./ExchangeBalanceTable";
 import { SectorPerformance } from "./SectorPerformance";
 
@@ -2404,9 +2403,6 @@ export function AnalysisPanel() {
 
         {/* On-Chain Data */}
         <OnChainSection />
-
-        {/* Whale Tracking */}
-        <WhaleTrackingSection />
 
         {/* Exchange Balances */}
         <section data-ocid="analysis.section.exchange-balances">

@@ -117,37 +117,84 @@ router.get('/tickers', async (req, res) => {
   }
 });
 
-// Blockchain stats (for on-chain data) - only hashrate, difficulty, active addresses, mempool size
+// Blockchain stats (for on-chain data) - hashrate, difficulty, active addresses, transactions, supply
 router.get('/blockchain-stats', async (req, res) => {
   try {
-    // Fetch hashrate (plaintext)
-    const hashrateRes = await axios.get('https://blockchain.info/q/hashrate');
-    const hashrate = Number.parseFloat(hashrateRes.data || 0);
+    // Helper to fetch with fallback
+    const fetchWithFallback = async (url) => {
+      try {
+        return await axios.get(url, { timeout: 8000 });
+      } catch {
+        // Try with CORS proxy
+        return await axios.get(proxiedGet(url), { timeout: 10000 });
+      }
+    };
 
-    // Fetch difficulty (plaintext)
-    const difficultyRes = await axios.get('https://blockchain.info/q/getdifficulty');
+    // Fetch hashrate (in GH/s, convert to EH/s)
+    const hashrateRes = await fetchWithFallback('https://blockchain.info/q/hashrate');
+    const hashrate = Number.parseFloat(hashrateRes.data || 0) / 1_000_000; // GH/s to EH/s
+
+    // Fetch difficulty
+    const difficultyRes = await fetchWithFallback('https://blockchain.info/q/getdifficulty');
     const difficulty = Number.parseFloat(difficultyRes.data || 0);
 
+    // Fetch total BTC supply (in satoshis, convert to BTC)
+    const supplyRes = await fetchWithFallback('https://blockchain.info/q/totalbc');
+    const totalbc = Number.parseFloat(supplyRes.data || 0);
+
+    // Fetch 24h transaction count
+    const txRes = await fetchWithFallback('https://blockchain.info/q/24hrtransactioncount');
+    const n_transactions = Number.parseInt(txRes.data || 0, 10);
+
+    // Fetch unique addresses (JSON chart data - 24h)
+    const addressesRes = await fetchWithFallback('https://api.blockchain.info/charts/n-unique-addresses?timespan=1days&format=json');
+    const addressesData = addressesRes.data?.values || [];
+    const n_unique_addresses = addressesData.length > 0 ? addressesData[addressesData.length - 1].y : 0;
+
     // Fetch mempool size (JSON chart data)
-    const mempoolRes = await axios.get('https://api.blockchain.info/charts/mempool-size?format=json');
+    const mempoolRes = await fetchWithFallback('https://api.blockchain.info/charts/mempool-size?format=json');
     const mempoolData = mempoolRes.data?.values || [];
     const mempoolSize = mempoolData.length > 0 ? mempoolData[mempoolData.length - 1].y : 0;
-
-    // Fetch unique addresses (JSON chart data)
-    const addressesRes = await axios.get('https://api.blockchain.info/charts/n-unique-addresses?format=json');
-    const addressesData = addressesRes.data?.values || [];
-    const activeAddresses = addressesData.length > 0 ? addressesData[addressesData.length - 1].y : 0;
 
     res.json({
       hashrate,
       difficulty,
+      totalbc,
+      n_transactions,
+      n_unique_addresses,
       mempoolSize,
-      activeAddresses,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error fetching blockchain stats:', error);
+    console.error('Error fetching blockchain stats:', error.message);
     res.status(500).json({ error: 'Failed to fetch blockchain stats' });
+  }
+});
+
+// Hashrate historical chart data
+router.get('/hashrate-chart', async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    const timespan = days === '1' ? '1days' : days === '7' ? '7days' : days === '90' ? '3months' : days === '180' ? '6months' : days === '365' ? '1year' : '30days';
+
+    const url = `https://api.blockchain.info/charts/hash-rate?timespan=${timespan}&format=json`;
+    const response = await axios.get(url, { timeout: 10000 }).catch(() => axios.get(proxiedGet(url), { timeout: 10000 }));
+
+    const values = response.data?.values || [];
+    const data = values.map(point => ({
+      date: new Date(point.x * 1000).toISOString().split('T')[0],
+      value: point.y / 1_000_000_000  // GH/s to EH/s
+    }));
+
+    res.json({
+      asset: 'btc',
+      metric: 'hashrate',
+      unit: 'EH/s',
+      data
+    });
+  } catch (error) {
+    console.error('Error fetching hashrate chart:', error.message);
+    res.status(500).json({ error: 'Failed to fetch hashrate data' });
   }
 });
 
