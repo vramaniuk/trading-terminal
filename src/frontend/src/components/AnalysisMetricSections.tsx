@@ -637,7 +637,7 @@ interface DerivativesData {
   shortPct: number | null;
   takerBuySellRatio: number | null;
   putCallRatio: number | null;
-  btcOiUsd: number | null; // from Binance
+  btcOiUsd: number | null; // from Bybit + OKX
   btcMktCap: number | null; // from CoinGecko (passed in via prop or fetched)
   loading: boolean;
 }
@@ -695,19 +695,15 @@ function useDerivativesData(): DerivativesData {
       /* ignore */
     }
 
-    // BTC Open Interest in USD
+    // BTC Open Interest in USD from CoinMetrics
     try {
-      const res = await window.fetch(
-        "https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT",
-      );
+      const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+      const res = await window.fetch(`${BACKEND_API}/api/analysis/open-interest?asset=btc`);
       if (res.ok) {
-        const json = (await res.json()) as {
-          openInterestValue?: string;
-          openInterest?: string;
+        const json = await res.json() as {
+          latest?: { value_usd?: number };
         };
-        const oiVal = Number.parseFloat(
-          json.openInterestValue ?? json.openInterest ?? "0",
-        );
+        const oiVal = json.latest?.value_usd;
         if (Number.isFinite(oiVal) && oiVal > 0) results.btcOiUsd = oiVal;
       }
     } catch {

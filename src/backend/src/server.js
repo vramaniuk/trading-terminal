@@ -4,7 +4,8 @@ import dotenv from 'dotenv';
 import analysisRoutes from './routes/analysis.js';
 import authRoutes from './routes/auth.js';
 
-dotenv.config();
+// Load environment variables - default to .env.development if NODE_ENV not set externally
+dotenv.config({ path: process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : '.env.development' });
 
 const app = express();
 const PORT = process.env.PORT || 3001;

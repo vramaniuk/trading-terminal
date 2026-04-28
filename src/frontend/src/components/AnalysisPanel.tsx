@@ -1414,7 +1414,7 @@ function useGlobalSpotVolume(): GlobalSpotVolumeState {
   return state;
 }
 
-// ---- Global OI hook (Binance + Bybit + OKX aggregation) ----
+// ---- Global OI hook (Bybit + OKX aggregation) ----
 interface GlobalOIState {
   btcOI: number;
   ethOI: number;
@@ -1436,155 +1436,49 @@ function useGlobalOI(): GlobalOIState {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchOI = useCallback(async () => {
-    const sources: {
-      name: string;
-      fetchBtc: () => Promise<number>;
-      fetchEth: () => Promise<number>;
-    }[] = [
-      {
-        name: "Binance",
-        fetchBtc: async () => {
-          const res = await fetch(
-            "https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT",
-          );
-          if (!res.ok) throw new Error();
-          const d = await res.json();
-          return Number.parseFloat(
-            (d as { openInterest?: string }).openInterest ?? "0",
-          );
-        },
-        fetchEth: async () => {
-          const res = await fetch(
-            "https://fapi.binance.com/fapi/v1/openInterest?symbol=ETHUSDT",
-          );
-          if (!res.ok) throw new Error();
-          const d = await res.json();
-          return Number.parseFloat(
-            (d as { openInterest?: string }).openInterest ?? "0",
-          );
-        },
-      },
-      {
-        name: "Bybit",
-        fetchBtc: async () => {
-          const res = await fetch(
-            "https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=5min&limit=1",
-          );
-          if (!res.ok) throw new Error();
-          const d = await res.json();
-          const list = (
-            d as { result?: { list?: Array<{ openInterest?: string }> } }
-          ).result?.list;
-          return Number.parseFloat(list?.[0]?.openInterest ?? "0");
-        },
-        fetchEth: async () => {
-          const res = await fetch(
-            "https://api.bybit.com/v5/market/open-interest?category=linear&symbol=ETHUSDT&intervalTime=5min&limit=1",
-          );
-          if (!res.ok) throw new Error();
-          const d = await res.json();
-          const list = (
-            d as { result?: { list?: Array<{ openInterest?: string }> } }
-          ).result?.list;
-          return Number.parseFloat(list?.[0]?.openInterest ?? "0");
-        },
-      },
-      {
-        name: "OKX",
-        fetchBtc: async () => {
-          const res = await fetch(
-            "https://www.okx.com/api/v5/public/open-interest?instType=SWAP&uly=BTC-USD",
-          );
-          if (!res.ok) throw new Error();
-          const d = await res.json();
-          const items = (d as { data?: Array<{ oi?: string }> }).data;
-          return (items ?? []).reduce(
-            (sum, item) => sum + Number.parseFloat(item.oi ?? "0"),
-            0,
-          );
-        },
-        fetchEth: async () => {
-          const res = await fetch(
-            "https://www.okx.com/api/v5/public/open-interest?instType=SWAP&uly=ETH-USD",
-          );
-          if (!res.ok) throw new Error();
-          const d = await res.json();
-          const items = (d as { data?: Array<{ oi?: string }> }).data;
-          return (items ?? []).reduce(
-            (sum, item) => sum + Number.parseFloat(item.oi ?? "0"),
-            0,
-          );
-        },
-      },
-    ];
-
-    // Fetch BTC prices to convert contract units to USD
-    let btcPrice = 0;
-    let ethPrice = 0;
     try {
-      const priceRes = await fetch(
-        "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
-      );
-      if (priceRes.ok) {
-        const pd = await priceRes.json();
-        btcPrice = Number.parseFloat((pd as { price?: string }).price ?? "0");
+      const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+      
+      // Fetch BTC and ETH OI from backend
+      const [btcRes, ethRes] = await Promise.allSettled([
+        fetch(`${BACKEND_API}/api/analysis/open-interest?asset=btc`),
+        fetch(`${BACKEND_API}/api/analysis/open-interest?asset=eth`),
+      ]);
+
+      let btcOI = 0;
+      let ethOI = 0;
+      const btcSources: string[] = [];
+      const ethSources: string[] = [];
+
+      if (btcRes.status === "fulfilled" && btcRes.value.ok) {
+        const btcData = await btcRes.value.json();
+        if (btcData.latest?.value_usd) {
+          btcOI = btcData.latest.value_usd;
+          btcSources.push("Bybit", "OKX");
+        }
+      }
+
+      if (ethRes.status === "fulfilled" && ethRes.value.ok) {
+        const ethData = await ethRes.value.json();
+        if (ethData.latest?.value_usd) {
+          ethOI = ethData.latest.value_usd;
+          ethSources.push("Bybit", "OKX");
+        }
+      }
+
+      if (btcOI > 0 || ethOI > 0) {
+        setState({
+          btcOI,
+          ethOI,
+          btcSources,
+          ethSources,
+          loading: false,
+          error: false,
+        });
+      } else {
+        setState((prev) => ({ ...prev, loading: false, error: true }));
       }
     } catch {
-      /* ignore */
-    }
-    try {
-      const priceRes2 = await fetch(
-        "https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT",
-      );
-      if (priceRes2.ok) {
-        const pd2 = await priceRes2.json();
-        ethPrice = Number.parseFloat((pd2 as { price?: string }).price ?? "0");
-      }
-    } catch {
-      /* ignore */
-    }
-
-    let totalBtcOI = 0;
-    let totalEthOI = 0;
-    const btcSrcs: string[] = [];
-    const ethSrcs: string[] = [];
-
-    await Promise.allSettled(
-      sources.map(async (src) => {
-        const [btcRaw, ethRaw] = await Promise.allSettled([
-          src.fetchBtc(),
-          src.fetchEth(),
-        ]);
-        if (
-          btcRaw.status === "fulfilled" &&
-          Number.isFinite(btcRaw.value) &&
-          btcRaw.value > 0
-        ) {
-          // Bybit and OKX return contracts (1 contract = 1 coin for linear), Binance returns coin amount
-          totalBtcOI += btcRaw.value * (btcPrice > 0 ? btcPrice : 1);
-          btcSrcs.push(src.name);
-        }
-        if (
-          ethRaw.status === "fulfilled" &&
-          Number.isFinite(ethRaw.value) &&
-          ethRaw.value > 0
-        ) {
-          totalEthOI += ethRaw.value * (ethPrice > 0 ? ethPrice : 1);
-          ethSrcs.push(src.name);
-        }
-      }),
-    );
-
-    if (totalBtcOI > 0 || totalEthOI > 0) {
-      setState({
-        btcOI: totalBtcOI,
-        ethOI: totalEthOI,
-        btcSources: btcSrcs,
-        ethSources: ethSrcs,
-        loading: false,
-        error: false,
-      });
-    } else {
       setState((prev) => ({ ...prev, loading: false, error: true }));
     }
   }, []);
@@ -2373,7 +2267,7 @@ export function AnalysisPanel() {
 
         {/* Open Interest */}
         <section data-ocid="analysis.section.oi">
-          <SectionHeader title="Open Interest" badge="Binance" />
+          <SectionHeader title="Open Interest" badge="Bybit + OKX" />
           <div className="flex flex-col sm:flex-row gap-4">
             <OICard asset="BTC" data={data.btcOI} />
             <OICard asset="ETH" data={data.ethOI} />
@@ -2388,11 +2282,11 @@ export function AnalysisPanel() {
           </p>
         </section>
 
-        {/* Global Open Interest — Binance + Bybit + OKX */}
+        {/* Global Open Interest — Bybit + OKX aggregation */}
         <section data-ocid="analysis.section.global_oi">
           <SectionHeader
             title="Open Interest (Global)"
-            subtitle="Aggregated across Binance, Bybit & OKX"
+            subtitle="Aggregated across Bybit & OKX"
             badge="Multi-Exchange"
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">

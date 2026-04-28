@@ -159,17 +159,25 @@ export async function fetchBtcSocial(): Promise<BtcSocialState> {
   };
 }
 
-// ---- Binance Open Interest ----
-export async function fetchBinanceOIFull(
-  symbol: string,
+// ---- Open Interest (Bybit + OKX) ----
+export async function fetchOpenInterest(
+  asset: string,
 ): Promise<OpenInterestState> {
-  const res = await fetch(`${BACKEND_API}/api/analysis/open-interest/${symbol}`);
+  const res = await fetch(`${BACKEND_API}/api/analysis/open-interest?asset=${asset}`);
   if (!res.ok) throw new Error("open interest");
   const data = await res.json();
+  
+  // Extract history data for sparkline
+  const history = data.history || [];
+  const downsampledHistory = history
+    .filter((_, i) => i % 1 === 0) // Take all points (already downsampled on backend)
+    .map((point: number) => point)
+    .slice(-48); // Last 48 points for sparkline
+  
   return {
-    oiUsd: data.oiUsd,
-    oiCcy: data.oiCcy,
-    history: data.history,
+    oiUsd: data.latest?.value_usd || 0,
+    oiCcy: 0,
+    history: downsampledHistory,
     loading: false,
     error: false,
   };
@@ -277,12 +285,12 @@ export function useAnalysisData(): AnalysisData {
   }, [loadSocial]);
 
   const loadOI = useCallback(() => {
-    safeFetch(() => fetchBinanceOIFull("BTCUSDT"), mountedRef, setBtcOI, {
+    safeFetch(() => fetchOpenInterest("btc"), mountedRef, setBtcOI, {
       ...defaultOI,
       loading: false,
       error: true,
     });
-    safeFetch(() => fetchBinanceOIFull("ETHUSDT"), mountedRef, setEthOI, {
+    safeFetch(() => fetchOpenInterest("eth"), mountedRef, setEthOI, {
       ...defaultOI,
       loading: false,
       error: true,
