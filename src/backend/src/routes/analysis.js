@@ -360,6 +360,45 @@ router.get('/hashrate-chart', async (req, res) => {
   }
 });
 
+// Difficulty historical chart data from blockchain.info
+router.get('/difficulty-chart', async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    // Map days to timespan format
+    const timespanMap = {
+      '1': '1days',
+      '7': '7days',
+      '30': '30days',
+      '90': '3months',
+      '180': '6months',
+      '365': '1year'
+    };
+    const timespan = timespanMap[days] || '30days';
+
+    const url = `https://api.blockchain.info/charts/difficulty?timespan=${timespan}&format=json&sampled=true`;
+    const response = await axios.get(url, { timeout: 15000 }).catch(() =>
+      axios.get(proxiedGet(url), { timeout: 20000 })
+    );
+
+    const values = response.data?.values || [];
+    const data = values.map(point => ({
+      date: new Date(point.x * 1000).toISOString().split('T')[0],
+      value: point.y
+    }));
+
+    res.json({
+      asset: 'btc',
+      metric: 'difficulty',
+      unit: 'T',
+      description: response.data?.description || 'Bitcoin network difficulty',
+      data
+    });
+  } catch (error) {
+    console.error('Error fetching difficulty chart:', error.message);
+    res.status(500).json({ error: 'Failed to fetch difficulty data' });
+  }
+});
+
 // CoinGecko global market data
 router.get('/coingecko-global', async (req, res) => {
   try {

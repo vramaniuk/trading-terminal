@@ -509,6 +509,177 @@ function HashrateChart() {
   );
 }
 
+// ---- Difficulty Chart Component ----
+interface DifficultyDataPoint {
+  date: string;
+  value: number;
+}
+
+function DifficultyChart() {
+  const [data, setData] = useState<DifficultyDataPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [days, setDays] = useState(30);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+      const res = await fetch(`${BACKEND_API}/api/analysis/difficulty-chart?days=${days}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const result = await res.json();
+      setData(result.data || []);
+    } catch {
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [days]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const currentDifficulty = data.length > 0 ? data[data.length - 1].value : 0;
+  const prevDifficulty = data.length > 1 ? data[data.length - 2].value : currentDifficulty;
+  const change24h = prevDifficulty ? ((currentDifficulty - prevDifficulty) / prevDifficulty) * 100 : 0;
+
+  const chartConfig = {
+    value: {
+      label: "Difficulty",
+      color: "oklch(0.820 0.160 90)",
+    },
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
+  const formatDifficulty = (n: number): string => {
+    if (n >= 1e15) return `${(n / 1e15).toFixed(2)}P`;
+    if (n >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
+    if (n >= 1e9) return `${(n / 1e9).toFixed(2)}G`;
+    return n.toFixed(0);
+  };
+
+  return (
+    <div
+      className="rounded-xl p-4 flex flex-col gap-3 col-span-full lg:col-span-2"
+      style={{
+        background: "oklch(0.155 0.020 240)",
+        border: "1px solid oklch(1 0 0 / 0.08)",
+      }}
+    >
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            style={{
+              background: "oklch(0.820 0.160 90 / 0.12)",
+              color: C_YELLOW,
+            }}
+          >
+            <Activity className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <div className="text-xs font-semibold" style={{ color: C_FG }}>
+              Bitcoin Network Difficulty
+            </div>
+            <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
+              Mining difficulty adjustment
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {!loading && data.length > 0 && (
+            <div className="flex items-center gap-2 mr-3">
+              <span className="text-sm font-mono font-bold" style={{ color: C_FG }}>
+                {formatDifficulty(currentDifficulty)}
+              </span>
+              <span
+                className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                style={{
+                  background: change24h >= 0 ? `${C_GREEN} / 0.15` : `${C_RED} / 0.15`,
+                  color: change24h >= 0 ? C_GREEN : C_RED,
+                }}
+              >
+                {change24h >= 0 ? "+" : ""}{change24h.toFixed(2)}%
+              </span>
+            </div>
+          )}
+          <div className="flex gap-1">
+            {[7, 30, 90, 180, 365].map((d) => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                className="px-2 py-0.5 text-[10px] font-medium rounded transition-colors"
+                style={{
+                  background: days === d ? "oklch(0.820 0.160 90 / 0.25)" : "oklch(1 0 0 / 0.05)",
+                  color: days === d ? C_YELLOW : C_DIM,
+                }}
+              >
+                {d === 365 ? "1Y" : `${d}D`}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <Skeleton className="h-48 w-full rounded-lg" style={{ background: "oklch(1 0 0 / 0.06)" }} />
+      ) : data.length === 0 ? (
+        <div className="h-48 flex items-center justify-center text-xs" style={{ color: C_DIM }}>
+          Failed to load difficulty data
+        </div>
+      ) : (
+        <ChartContainer config={chartConfig} className="h-48 w-full">
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="difficultyGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="oklch(0.820 0.160 90)" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="oklch(0.820 0.160 90)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis
+              dataKey="date"
+              tickFormatter={formatDate}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10, fill: "oklch(0.450 0.015 240)" }}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10, fill: "oklch(0.450 0.015 240)" }}
+              tickFormatter={(value) => formatDifficulty(value)}
+              domain={["auto", "auto"]}
+            />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(label) => formatDate(label as string)}
+                  formatter={(value) => [`${formatDifficulty(value as number)}`, "Difficulty"]}
+                />
+              }
+            />
+            <Area
+              dataKey="value"
+              type="monotone"
+              stroke="oklch(0.820 0.160 90)"
+              strokeWidth={2}
+              fill="url(#difficultyGradient)"
+              dot={false}
+              activeDot={{ r: 4, fill: "oklch(0.820 0.160 90)" }}
+            />
+          </AreaChart>
+        </ChartContainer>
+      )}
+    </div>
+  );
+}
+
 export function OnChainSection() {
   const d = useOnChainData();
 
@@ -705,6 +876,9 @@ export function OnChainSection() {
 
         {/* Hashrate Chart */}
         <HashrateChart />
+
+        {/* Difficulty Chart */}
+        <DifficultyChart />
       </div>
     </section>
   );
