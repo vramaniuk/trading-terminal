@@ -12,7 +12,12 @@ import type {
   OpenInterestState,
 } from "../hooks/useAnalysisData";
 import { useAnalysisData } from "../hooks/useAnalysisData";
-import { DerivativesSection, OnChainSection, VolumeSection } from "./AnalysisMetricSections";
+import {
+  DerivativesSection,
+  EtfFlowsSection,
+  OnChainSection,
+  VolumeSection,
+} from "./AnalysisMetricSections";
 import { SectorPerformance } from "./SectorPerformance";
 
 // ---- Stablecoin exclusion set ----
@@ -1966,6 +1971,9 @@ export function AnalysisPanel() {
 
         {/* Global Spot Volume with Charts */}
         <VolumeSection />
+
+        {/* US spot ETF net flows */}
+        <EtfFlowsSection />
 
         {/* Market Sentiment */}
         <section data-ocid="analysis.section.sentiment">

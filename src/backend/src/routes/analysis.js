@@ -8,6 +8,10 @@ const BINANCE_FAPI = 'https://fapi.binance.com';
 const BYBIT_API = 'https://api.bybit.com';
 const OKX_API = 'https://www.okx.com';
 const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY;
+const BITBO_BTC_ETF_URL = 'https://bitbo.io/treasuries/etf-flows/';
+
+/** Bitbo ETF series updates daily; cache responses to limit fetches. */
+const ETF_FLOW_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 // Simple in-memory cache with TTL for CoinGecko API (rate limit: 10-30 calls/min free tier)
 const cache = new Map();
@@ -25,6 +29,31 @@ function getCached(key) {
 
 function setCached(key, data, ttlMs = CACHE_TTL_MS) {
   cache.set(key, { data, expiry: Date.now() + ttlMs });
+}
+
+/** Parse embedded Bitbo Highcharts series (US spot BTC ETF net flow, USD). */
+function extractBitboBtcHistoryUsdData(html) {
+  const startMarker = 'const historyUsd = [';
+  const start = html.indexOf(startMarker);
+  if (start === -1) return [];
+  const end = html.indexOf('\n    const mergedHistoryUsd', start + startMarker.length);
+  if (end === -1) return [];
+  const block = html.slice(start, end);
+  const re =
+    /getPreviousBusinessDay\((\d+)\)\s*,\s*truncate\(\s*(-?[\d.]+)\s*\*\s*([\d.]+)\s*,\s*\d+\s*\)/g;
+  const out = [];
+  let m;
+  while ((m = re.exec(block)) !== null) {
+    const ts = Number(m[1]);
+    const netFlowUsd = Number(m[2]) * Number(m[3]);
+    if (!Number.isFinite(ts) || !Number.isFinite(netFlowUsd)) continue;
+    out.push({
+      date: new Date(ts).toISOString().split('T')[0],
+      netFlowUsd,
+    });
+  }
+  out.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
 }
 
 function proxiedGet(url) {
@@ -443,6 +472,73 @@ router.get('/volume-chart/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching volume chart:', error.message);
     res.status(500).json({ error: 'Failed to fetch volume data' });
+  }
+});
+
+// US spot Bitcoin ETF daily net flows — bitbo.io only (embedded page chart). Cache 24h.
+router.get('/etf-daily-flows/:asset', async (req, res) => {
+  try {
+    const asset = String(req.params.asset || '').toLowerCase();
+    if (asset !== 'btc') {
+      return res.status(400).json({ error: 'asset must be btc (Bitbo US spot Bitcoin ETF flows only)' });
+    }
+    const days = Math.min(730, Math.max(7, Number.parseInt(String(req.query.days), 10) || 90));
+
+    const cacheKey = `etf-daily-flows-btc-${days}-bitbo-v1`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    let data = [];
+    let source = 'none';
+    let sourceDetail = '';
+
+    try {
+      const response = await axios.get(BITBO_BTC_ETF_URL, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; TradingTerminal/1.0)',
+        },
+      });
+      data = extractBitboBtcHistoryUsdData(response.data);
+      if (data.length > 0) {
+        source = 'bitbo';
+        sourceDetail = `${BITBO_BTC_ETF_URL} — US spot Bitcoin ETF net flow (USD) from embedded chart series.`;
+      } else {
+        sourceDetail = 'Bitbo page loaded but no historyUsd series was parsed.';
+      }
+    } catch (e) {
+      console.warn('Bitbo ETF:', e.message);
+      sourceDetail = 'Failed to fetch bitbo.io treasuries/etf-flows/.';
+    }
+
+    const cutoffMs = Date.now() - days * 86400000;
+    let trimmed = data.filter((row) => {
+      const t = new Date(`${row.date}T12:00:00Z`).getTime();
+      return t >= cutoffMs;
+    });
+    if (trimmed.length > days) trimmed = trimmed.slice(-days);
+    if (trimmed.length === 0 && data.length > 0) {
+      trimmed = data.length > days ? data.slice(-days) : data;
+    }
+
+    const result = {
+      asset: 'btc',
+      metric: 'etf_net_flow_usd',
+      unit: 'USD',
+      source,
+      sourceDetail,
+      description: 'US spot Bitcoin ETF daily net flow (inflows minus outflows).',
+      days,
+      data: trimmed,
+    };
+
+    setCached(cacheKey, result, ETF_FLOW_CACHE_TTL_MS);
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching ETF daily flows:', error.message);
+    res.status(500).json({ error: 'Failed to fetch ETF flow data' });
   }
 });
 
