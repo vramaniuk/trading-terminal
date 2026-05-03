@@ -1,11 +1,30 @@
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Get current file directory (works with ES modules)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load environment variables IMMEDIATELY before any other imports
+const envPath = process.env.NODE_ENV
+  ? join(__dirname, '..', `.env.${process.env.NODE_ENV}`)
+  : join(__dirname, '..', '.env.development');
+
+dotenv.config({ path: envPath });
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import analysisRoutes from './routes/analysis.js';
 import authRoutes from './routes/auth.js';
 
-// Load environment variables - default to .env.development if NODE_ENV not set externally
-dotenv.config({ path: process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : '.env.development' });
+console.log('[server] Loading env from:', envPath);
+console.log('[server] PORT loaded:', process.env.PORT || 'using default 3001');
+console.log('[server] API keys loaded:', {
+  COINGECKO: process.env.COINGECKO_API_KEY ? '✓' : '✗',
+  FINNHUB: process.env.FINNHUB_API_KEY ? '✓' : '✗',
+  DUNE: process.env.DUNE_API_KEY ? '✓' : '✗',
+});
 
 const app = express();
 const PORT = process.env.PORT || 3001;

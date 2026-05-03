@@ -1120,7 +1120,7 @@ interface EtfFlowsApiResult {
 }
 
 interface EtfNetFlowChartProps {
-  asset: "btc";
+  asset: "btc" | "eth";
   title: string;
   accent: string;
 }
@@ -1343,12 +1343,13 @@ export function EtfFlowsSection() {
   return (
     <section data-ocid="analysis.section.etf_flows" className="mb-8">
       <MetricSectionHeader
-        title="US spot Bitcoin ETF — daily net flows"
-        subtitle="USD net flow from bitbo.io treasuries chart (BTC only; no API key)"
-        badge="Bitbo"
+        title="US spot ETF — daily net flows"
+        subtitle="USD net flow from bitbo.io (BTC) and Finnhub (ETH)"
+        badge="Bitbo · Finnhub"
       />
-      <div className="max-w-4xl">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <EtfNetFlowChart asset="btc" title="Bitcoin (BTC) spot ETFs" accent="oklch(0.820 0.160 60)" />
+        <EtfNetFlowChart asset="eth" title="Ethereum (ETH) spot ETFs" accent="oklch(0.785 0.135 280)" />
       </div>
     </section>
   );

@@ -7,7 +7,10 @@ const CORSPROXY = 'https://corsproxy.io/?url=';
 const BINANCE_FAPI = 'https://fapi.binance.com';
 const BYBIT_API = 'https://api.bybit.com';
 const OKX_API = 'https://www.okx.com';
-const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY;
+// Lazy getters for env vars - ensures they are read AFTER dotenv.config() runs
+const getCOINGECKO_API_KEY = () => process.env.COINGECKO_API_KEY;
+const getFINNHUB_API_KEY = () => process.env.FINNHUB_API_KEY;
+const getDUNE_API_KEY = () => process.env.DUNE_API_KEY;
 const BITBO_BTC_ETF_URL = 'https://bitbo.io/treasuries/etf-flows/';
 
 /** Bitbo ETF series updates daily; cache responses to limit fetches. */
@@ -54,6 +57,403 @@ function extractBitboBtcHistoryUsdData(html) {
   }
   out.sort((a, b) => a.date.localeCompare(b.date));
   return out;
+}
+
+/** Parse CoinGlass ETH ETF flow data from embedded JSON/JS */
+function extractCoinGlassEthEtfData(html) {
+  const out = [];
+
+  // CoinGlass often stores data in __NEXT_DATA__ or similar script tags
+  const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (nextDataMatch) {
+    try {
+      const jsonData = JSON.parse(nextDataMatch[1]);
+      // Navigate through the JSON structure to find ETF flow data
+      const props = jsonData?.props?.pageProps;
+      if (props) {
+        // Try to extract flow data from various possible locations
+        const etfData = props.etfData || props.data || props.etfFlows || props.chartData;
+        if (Array.isArray(etfData)) {
+          etfData.forEach(point => {
+            if (point.date && (point.netFlow != null || point.flow != null || point.inflow != null)) {
+              out.push({
+                date: point.date,
+                netFlowUsd: Number(point.netFlow || point.flow || point.inflow || 0),
+              });
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse __NEXT_DATA__:', e.message);
+    }
+  }
+
+  // Alternative: Look for chart data in script tags
+  const chartDataMatch = html.match(/"chartData"\s*:\s*(\[[\s\S]*?\])/);
+  if (chartDataMatch) {
+    try {
+      const chartData = JSON.parse(chartDataMatch[1]);
+      if (Array.isArray(chartData)) {
+        chartData.forEach(point => {
+          if (point.date && (point.flow != null || point.netFlow != null)) {
+            out.push({
+              date: point.date,
+              netFlowUsd: Number(point.flow || point.netFlow || 0),
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to parse chartData:', e.message);
+    }
+  }
+
+  // Alternative: Look for ETF-specific data arrays
+  const etfFlowMatch = html.match(/"etfFlows"\s*:\s*(\[[\s\S]*?\])/);
+  if (etfFlowMatch) {
+    try {
+      const etfFlows = JSON.parse(etfFlowMatch[1]);
+      if (Array.isArray(etfFlows)) {
+        etfFlows.forEach(point => {
+          if (point.date && (point.netFlow != null || point.flow != null)) {
+            out.push({
+              date: point.date,
+              netFlowUsd: Number(point.netFlow || point.flow || 0),
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to parse etfFlows:', e.message);
+    }
+  }
+
+  // Alternative: Look for data arrays with date and value fields
+  const dataMatch = html.match(/"data"\s*:\s*(\[[\s\S]*?\])/);
+  if (dataMatch) {
+    try {
+      const data = JSON.parse(dataMatch[1]);
+      if (Array.isArray(data)) {
+        data.forEach(point => {
+          if (point.date && (point.value != null || point.netFlow != null || point.flow != null)) {
+            out.push({
+              date: point.date,
+              netFlowUsd: Number(point.value || point.netFlow || point.flow || 0),
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to parse data array:', e.message);
+    }
+  }
+
+  // Sort by date
+  out.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
+}
+
+/** Parse SoSoValue ETH ETF flow data from embedded JSON/JS */
+function extractSoSoValueEthEtfData(html) {
+  const out = [];
+
+  // SoSoValue likely uses __NEXT_DATA__ or similar Next.js patterns
+  const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (nextDataMatch) {
+    try {
+      const jsonData = JSON.parse(nextDataMatch[1]);
+      // Navigate through the JSON structure to find ETF flow data
+      const props = jsonData?.props?.pageProps;
+      if (props) {
+        // Try to extract flow data from various possible locations
+        const etfData = props.etfData || props.data || props.etfFlows || props.chartData || props.netFlowData;
+        if (Array.isArray(etfData)) {
+          etfData.forEach(point => {
+            if (point.date && (point.netFlow != null || point.flow != null || point.inflow != null || point.value != null)) {
+              out.push({
+                date: point.date,
+                netFlowUsd: Number(point.netFlow || point.flow || point.inflow || point.value || 0),
+              });
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse __NEXT_DATA__:', e.message);
+    }
+  }
+
+  // Alternative: Look for chart data in script tags
+  const chartDataMatch = html.match(/"chartData"\s*:\s*(\[[\s\S]*?\])/);
+  if (chartDataMatch) {
+    try {
+      const chartData = JSON.parse(chartDataMatch[1]);
+      if (Array.isArray(chartData)) {
+        chartData.forEach(point => {
+          if (point.date && (point.flow != null || point.netFlow != null || point.value != null)) {
+            out.push({
+              date: point.date,
+              netFlowUsd: Number(point.flow || point.netFlow || point.value || 0),
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to parse chartData:', e.message);
+    }
+  }
+
+  // Alternative: Look for ETF-specific data arrays
+  const etfFlowMatch = html.match(/"etfFlows"\s*:\s*(\[[\s\S]*?\])/);
+  if (etfFlowMatch) {
+    try {
+      const etfFlows = JSON.parse(etfFlowMatch[1]);
+      if (Array.isArray(etfFlows)) {
+        etfFlows.forEach(point => {
+          if (point.date && (point.netFlow != null || point.flow != null)) {
+            out.push({
+              date: point.date,
+              netFlowUsd: Number(point.netFlow || point.flow || 0),
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to parse etfFlows:', e.message);
+    }
+  }
+
+  // Alternative: Look for netFlowData arrays
+  const netFlowMatch = html.match(/"netFlowData"\s*:\s*(\[[\s\S]*?\])/);
+  if (netFlowMatch) {
+    try {
+      const netFlowData = JSON.parse(netFlowMatch[1]);
+      if (Array.isArray(netFlowData)) {
+        netFlowData.forEach(point => {
+          if (point.date && (point.netFlow != null || point.flow != null || point.value != null)) {
+            out.push({
+              date: point.date,
+              netFlowUsd: Number(point.netFlow || point.flow || point.value || 0),
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to parse netFlowData:', e.message);
+    }
+  }
+
+  // Alternative: Look for data arrays with date and value fields
+  const dataMatch = html.match(/"data"\s*:\s*(\[[\s\S]*?\])/);
+  if (dataMatch) {
+    try {
+      const data = JSON.parse(dataMatch[1]);
+      if (Array.isArray(data)) {
+        data.forEach(point => {
+          if (point.date && (point.value != null || point.netFlow != null || point.flow != null)) {
+            out.push({
+              date: point.date,
+              netFlowUsd: Number(point.value || point.netFlow || point.flow || 0),
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to parse data array:', e.message);
+    }
+  }
+
+  // Sort by date
+  out.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
+}
+
+/** Fetch ETH ETF holdings from Finnhub and calculate flows */
+async function fetchFinnhubEthEtfFlows(days) {
+  if (!getFINNHUB_API_KEY()) {
+    throw new Error('FINNHUB_API_KEY not set');
+  }
+
+  // List of major US spot ETH ETF tickers
+  const ethEtfs = ['ETHA', 'ETHE', 'FETH', 'CETH', 'ETHW', 'ETHV', 'QETH', 'EZET'];
+  
+  const holdingsByDate = new Map();
+  
+  // Fetch holdings for each ETF
+  for (const ticker of ethEtfs) {
+    try {
+      const url = `https://finnhub.io/api/v1/etf/holdings?symbol=${ticker}&token=${getFINNHUB_API_KEY()}`;
+      const response = await axios.get(url, { timeout: 15000 });
+      const holdings = response.data?.holdings || [];
+      
+      holdings.forEach(holding => {
+        const date = holding.date;
+        if (!date) return;
+        
+        if (!holdingsByDate.has(date)) {
+          holdingsByDate.set(date, []);
+        }
+        holdingsByDate.get(date).push({
+          ticker,
+          shares: Number(holding.shares) || 0,
+          price: Number(holding.price) || 0,
+        });
+      });
+    } catch (e) {
+      console.warn(`Failed to fetch Finnhub holdings for ${ticker}:`, e.message);
+    }
+  }
+  
+  // Calculate total holdings per date
+  const totalHoldingsByDate = new Map();
+  holdingsByDate.forEach((holdings, date) => {
+    let totalValue = 0;
+    holdings.forEach(h => {
+      totalValue += h.shares * h.price;
+    });
+    totalHoldingsByDate.set(date, totalValue);
+  });
+  
+  // Sort dates
+  const sortedDates = Array.from(totalHoldingsByDate.keys()).sort();
+  
+  // Calculate flows (change in holdings)
+  const flows = [];
+  for (let i = 1; i < sortedDates.length; i++) {
+    const prevDate = sortedDates[i - 1];
+    const currDate = sortedDates[i];
+    const prevValue = totalHoldingsByDate.get(prevDate) || 0;
+    const currValue = totalHoldingsByDate.get(currDate) || 0;
+    const flow = currValue - prevValue;
+    
+    flows.push({
+      date: currDate,
+      netFlowUsd: flow,
+    });
+  }
+  
+  // Return last N days of flows
+  return flows.slice(-days);
+}
+
+/** Fetch ETH ETF spot net flows from Dune Analytics */
+async function fetchDuneEthEtfFlows(days) {
+  if (!getDUNE_API_KEY()) {
+    throw new Error('DUNE_API_KEY not set');
+  }
+
+  // Dune query ID for Ethereum Spot ETF Net Inflows (updated daily)
+  // This query tracks daily net inflows for US spot ETH ETFs
+  // NOTE: Query ID 4356704 is a reference query. Verify it exists in your Dune account
+  // or create your own query at dune.com/queries and update this ID.
+  // Public queries can also be found in Dune's query library.
+  const DUNE_ETH_ETF_QUERY_ID = 4356704;
+
+  try {
+    // Step 1: Execute the query (or use existing results)
+    const executeUrl = `https://api.dune.com/api/v1/query/${DUNE_ETH_ETF_QUERY_ID}/execute`;
+    const executeRes = await axios.post(
+      executeUrl,
+      {},
+      {
+        headers: {
+          'X-Dune-API-Key': getDUNE_API_KEY(),
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      }
+    );
+
+    const executionId = executeRes.data?.execution_id;
+    if (!executionId) {
+      throw new Error('No execution ID returned from Dune');
+    }
+
+    // Step 2: Poll for results (Dune queries may take time)
+    const maxRetries = 30;
+    const pollInterval = 2000; // 2 seconds
+
+    for (let i = 0; i < maxRetries; i++) {
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+
+      const statusUrl = `https://api.dune.com/api/v1/execution/${executionId}/status`;
+      const statusRes = await axios.get(statusUrl, {
+        headers: { 'X-Dune-API-Key': getDUNE_API_KEY() },
+        timeout: 10000,
+      });
+
+      const state = statusRes.data?.state;
+      if (state === 'QUERY_STATE_COMPLETED') {
+        break;
+      } else if (state === 'QUERY_STATE_FAILED' || state === 'QUERY_STATE_CANCELLED') {
+        throw new Error(`Dune query failed with state: ${state}`);
+      }
+      // Continue polling if state is EXECUTING or PENDING
+    }
+
+    // Step 3: Fetch results
+    const resultsUrl = `https://api.dune.com/api/v1/execution/${executionId}/results`;
+    const resultsRes = await axios.get(resultsUrl, {
+      headers: { 'X-Dune-API-Key': getDUNE_API_KEY() },
+      timeout: 15000,
+    });
+
+    const rows = resultsRes.data?.result?.rows || [];
+
+    // Transform Dune results to our format
+    // Expected columns: date, net_inflow_usd (or similar)
+    const flows = rows
+      .map((row) => ({
+        date: row.date || row.day || row.timestamp,
+        netFlowUsd: Number(row.net_inflow_usd || row.net_flow_usd || row.inflow_usd || 0),
+      }))
+      .filter((row) => row.date && Number.isFinite(row.netFlowUsd))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Return last N days
+    return flows.slice(-days);
+  } catch (error) {
+    console.error('Dune API error:', error.message);
+    throw error;
+  }
+}
+
+/** Fetch latest ETH ETF spot net flows from Dune using results endpoint (faster, cached) */
+async function fetchDuneEthEtfFlowsLatest(days) {
+  if (!getDUNE_API_KEY()) {
+    throw new Error('DUNE_API_KEY not set');
+  }
+
+  // Dune query ID for Ethereum Spot ETF Net Inflows
+  // NOTE: Query ID 4356704 is a reference. Verify it exists or create your own query.
+  const DUNE_ETH_ETF_QUERY_ID = 4356704;
+
+  try {
+    // Use the results endpoint to get latest cached results (much faster)
+    const resultsUrl = `https://api.dune.com/api/v1/query/${DUNE_ETH_ETF_QUERY_ID}/results`;
+    const resultsRes = await axios.get(resultsUrl, {
+      headers: { 'X-Dune-API-Key': getDUNE_API_KEY() },
+      timeout: 15000,
+    });
+
+    const rows = resultsRes.data?.result?.rows || [];
+
+    // Transform Dune results to our format
+    const flows = rows
+      .map((row) => ({
+        date: row.date || row.day || row.timestamp,
+        netFlowUsd: Number(row.net_inflow_usd || row.net_flow_usd || row.inflow_usd || row.net_flow || 0),
+      }))
+      .filter((row) => row.date && Number.isFinite(row.netFlowUsd))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Return last N days
+    return flows.slice(-days);
+  } catch (error) {
+    console.error('Dune API error (latest):', error.message);
+    throw error;
+  }
 }
 
 function proxiedGet(url) {
@@ -125,8 +525,8 @@ router.get('/btc-social', async (req, res) => {
       community_data: 'false',
       developer_data: 'false'
     });
-    if (COINGECKO_API_KEY) {
-      params.append('x_cg_demo_api_key', COINGECKO_API_KEY);
+    if (getCOINGECKO_API_KEY()) {
+      params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/coins/bitcoin?${params.toString()}`;
     let response = await axios.get(url).catch(() => axios.get(proxiedGet(url)));
@@ -409,8 +809,8 @@ router.get('/coingecko-global', async (req, res) => {
     }
     
     const params = new URLSearchParams();
-    if (COINGECKO_API_KEY) {
-      params.append('x_cg_demo_api_key', COINGECKO_API_KEY);
+    if (getCOINGECKO_API_KEY()) {
+      params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/global?${params.toString()}`;
     const response = await axios.get(url, { timeout: 10000 }).catch(() => 
@@ -442,8 +842,8 @@ router.get('/coingecko-coin/:id', async (req, res) => {
       community_data: 'false',
       developer_data: 'false'
     });
-    if (COINGECKO_API_KEY) {
-      params.append('x_cg_demo_api_key', COINGECKO_API_KEY);
+    if (getCOINGECKO_API_KEY()) {
+      params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/coins/${id}?${params.toString()}`;
     const response = await axios.get(url, { timeout: 10000 }).catch(() => 
@@ -473,8 +873,8 @@ router.get('/volume-chart/:id', async (req, res) => {
       vs_currency: 'usd',
       days: String(days),
     });
-    if (COINGECKO_API_KEY) {
-      params.append('x_cg_demo_api_key', COINGECKO_API_KEY);
+    if (getCOINGECKO_API_KEY()) {
+      params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?${params.toString()}`;
     const response = await axios.get(url, { timeout: 15000 }).catch(() =>
@@ -518,63 +918,120 @@ router.get('/volume-chart/:id', async (req, res) => {
 router.get('/etf-daily-flows/:asset', async (req, res) => {
   try {
     const asset = String(req.params.asset || '').toLowerCase();
-    if (asset !== 'btc') {
-      return res.status(400).json({ error: 'asset must be btc (Bitbo US spot Bitcoin ETF flows only)' });
-    }
     const days = Math.min(730, Math.max(7, Number.parseInt(String(req.query.days), 10) || 90));
-
-    const cacheKey = `etf-daily-flows-btc-${days}-bitbo-v1`;
-    const cached = getCached(cacheKey);
-    if (cached) {
-      return res.json(cached);
-    }
 
     let data = [];
     let source = 'none';
     let sourceDetail = '';
 
-    try {
-      const response = await axios.get(BITBO_BTC_ETF_URL, {
-        timeout: 30000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; TradingTerminal/1.0)',
-        },
-      });
-      data = extractBitboBtcHistoryUsdData(response.data);
-      if (data.length > 0) {
-        source = 'bitbo';
-        sourceDetail = `${BITBO_BTC_ETF_URL} — US spot Bitcoin ETF net flow (USD) from embedded chart series.`;
-      } else {
-        sourceDetail = 'Bitbo page loaded but no historyUsd series was parsed.';
+    if (asset === 'btc') {
+      const cacheKey = `etf-daily-flows-btc-${days}-bitbo-v1`;
+      const cached = getCached(cacheKey);
+      if (cached) {
+        return res.json(cached);
       }
-    } catch (e) {
-      console.warn('Bitbo ETF:', e.message);
-      sourceDetail = 'Failed to fetch bitbo.io treasuries/etf-flows/.';
+
+      try {
+        const response = await axios.get(BITBO_BTC_ETF_URL, {
+          timeout: 30000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; TradingTerminal/1.0)',
+          },
+        });
+        data = extractBitboBtcHistoryUsdData(response.data);
+        if (data.length > 0) {
+          source = 'bitbo';
+          sourceDetail = `${BITBO_BTC_ETF_URL} — US spot Bitcoin ETF net flow (USD) from embedded chart series.`;
+        } else {
+          sourceDetail = 'Bitbo page loaded but no historyUsd series was parsed.';
+        }
+      } catch (e) {
+        console.warn('Bitbo ETF:', e.message);
+        sourceDetail = 'Failed to fetch bitbo.io treasuries/etf-flows/.';
+      }
+
+      const cutoffMs = Date.now() - days * 86400000;
+      let trimmed = data.filter((row) => {
+        const t = new Date(`${row.date}T12:00:00Z`).getTime();
+        return t >= cutoffMs;
+      });
+      if (trimmed.length > days) trimmed = trimmed.slice(-days);
+      if (trimmed.length === 0 && data.length > 0) {
+        trimmed = data.length > days ? data.slice(-days) : data;
+      }
+
+      const result = {
+        asset: 'btc',
+        metric: 'etf_net_flow_usd',
+        unit: 'USD',
+        source,
+        sourceDetail,
+        description: 'US spot Bitcoin ETF daily net flow (inflows minus outflows).',
+        days,
+        data: trimmed,
+      };
+
+      setCached(cacheKey, result, ETF_FLOW_CACHE_TTL_MS);
+      res.json(result);
+    } else if (asset === 'eth') {
+      // ETH ETF flows: Try Dune first, then Finnhub as fallback
+      const cacheKey = `etf-daily-flows-eth-${days}-dune-v1`;
+      const cached = getCached(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
+      // Try Dune API first for ETH ETF spot net flows
+      if (getDUNE_API_KEY()) {
+        try {
+          data = await fetchDuneEthEtfFlowsLatest(days);
+          if (data.length > 0) {
+            source = 'dune';
+            sourceDetail = 'Dune Analytics — US spot Ethereum ETF daily net inflows (USD) from Dune query.';
+          } else {
+            sourceDetail = 'Dune API returned no data, will try fallback.';
+          }
+        } catch (e) {
+          console.warn('Dune ETH ETF:', e.message);
+          sourceDetail = `Dune API failed: ${e.message}`;
+        }
+      } else {
+        sourceDetail = 'DUNE_API_KEY not set, skipping Dune source.';
+      }
+
+      // Fallback to Finnhub if Dune failed or returned no data
+      if (data.length === 0 && getFINNHUB_API_KEY()) {
+        try {
+          const finnhubData = await fetchFinnhubEthEtfFlows(days);
+          if (finnhubData.length > 0) {
+            data = finnhubData;
+            source = 'finnhub';
+            sourceDetail = 'Finnhub API — US spot Ethereum ETF net flow (USD) calculated from daily holdings changes. (Dune fallback)';
+          } else {
+            sourceDetail += ' Finnhub API also returned no holdings data.';
+          }
+        } catch (e) {
+          console.warn('Finnhub ETH ETF fallback:', e.message);
+          sourceDetail += ` Finnhub fallback failed: ${e.message}`;
+        }
+      }
+
+      const result = {
+        asset: 'eth',
+        metric: 'etf_net_flow_usd',
+        unit: 'USD',
+        source,
+        sourceDetail,
+        description: 'US spot Ethereum ETF daily net flow (inflows minus outflows).',
+        days,
+        data,
+      };
+
+      setCached(cacheKey, result, ETF_FLOW_CACHE_TTL_MS);
+      res.json(result);
+    } else {
+      return res.status(400).json({ error: 'asset must be btc or eth' });
     }
-
-    const cutoffMs = Date.now() - days * 86400000;
-    let trimmed = data.filter((row) => {
-      const t = new Date(`${row.date}T12:00:00Z`).getTime();
-      return t >= cutoffMs;
-    });
-    if (trimmed.length > days) trimmed = trimmed.slice(-days);
-    if (trimmed.length === 0 && data.length > 0) {
-      trimmed = data.length > days ? data.slice(-days) : data;
-    }
-
-    const result = {
-      asset: 'btc',
-      metric: 'etf_net_flow_usd',
-      unit: 'USD',
-      source,
-      sourceDetail,
-      description: 'US spot Bitcoin ETF daily net flow (inflows minus outflows).',
-      days,
-      data: trimmed,
-    };
-
-    setCached(cacheKey, result, ETF_FLOW_CACHE_TTL_MS);
-    res.json(result);
   } catch (error) {
     console.error('Error fetching ETF daily flows:', error.message);
     res.status(500).json({ error: 'Failed to fetch ETF flow data' });
@@ -595,8 +1052,8 @@ router.get('/coingecko-markets', async (req, res) => {
     if (category) {
       params.append('category', category);
     }
-    if (COINGECKO_API_KEY) {
-      params.append('x_cg_demo_api_key', COINGECKO_API_KEY);
+    if (getCOINGECKO_API_KEY()) {
+      params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/coins/markets?${params.toString()}`;
     const response = await axios.get(url).catch(() => axios.get(proxiedGet(url)));
@@ -983,8 +1440,8 @@ router.get('/exchange-balances', async (req, res) => {
 router.get('/categories', async (req, res) => {
   try {
     const params = new URLSearchParams();
-    if (COINGECKO_API_KEY) {
-      params.append('x_cg_demo_api_key', COINGECKO_API_KEY);
+    if (getCOINGECKO_API_KEY()) {
+      params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/coins/categories?${params.toString()}`;
     const response = await axios.get(url).catch(() => axios.get(proxiedGet(url)));
