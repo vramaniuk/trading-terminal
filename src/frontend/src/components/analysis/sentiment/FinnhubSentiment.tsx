@@ -1,14 +1,8 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Users, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-
-const C_GREEN = "oklch(0.723 0.185 150)";
-const C_RED = "oklch(0.637 0.220 25)";
-const C_YELLOW = "oklch(0.820 0.160 90)";
-const C_CYAN = "oklch(0.785 0.135 200)";
-const C_FG = "oklch(0.910 0.015 240)";
-const C_DIM = "oklch(0.450 0.015 240)";
-const C_MID = "oklch(0.500 0.015 240)";
+import { C_GREEN, C_RED, C_YELLOW, C_CYAN, C_FG, C_DIM, C_MID } from "@/lib/analysisConstants";
+import { SectionHeader } from "@/components/analysis/common/SectionHeader";
 
 interface RecommendationPeriod {
   period: string;
@@ -234,14 +228,11 @@ export function SocialSentimentCard({ symbol }: { symbol: string }) {
 export function FinnhubSentimentSection() {
   return (
     <section data-ocid="analysis.section.sentiment" className="mb-8">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex flex-col gap-0.5">
-          <h2 className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "oklch(0.612 0.020 240)" }}>Market Sentiment</h2>
-          <span className="text-[10px]" style={{ color: C_DIM }}>Analyst ratings, news & social for crypto-correlated equities</span>
-        </div>
-        <span className="text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0" style={{ background: "oklch(0.785 0.135 200 / 0.10)", color: C_CYAN, border: "1px solid oklch(0.785 0.135 200 / 0.20)" }}>Finnhub</span>
-        <div className="flex-1 h-px" style={{ background: "oklch(1 0 0 / 0.07)" }} />
-      </div>
+      <SectionHeader
+        title="Market Sentiment"
+        subtitle="Analyst ratings, news & social for crypto-correlated equities"
+        badge="Finnhub"
+      />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {CRYPTO_PROXIES.map((proxy) => (
           <div key={proxy.symbol} className="contents">

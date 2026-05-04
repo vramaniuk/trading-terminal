@@ -18,7 +18,7 @@ import {
   OnChainSection,
   VolumeSection,
 } from "./AnalysisMetricSections";
-import { FinnhubSentimentSection } from "./FinnhubSentiment";
+import { FinnhubSentimentSection } from "./analysis/sentiment/FinnhubSentiment";
 import { SectorPerformance } from "./SectorPerformance";
 
 // ---- Stablecoin exclusion set ----
