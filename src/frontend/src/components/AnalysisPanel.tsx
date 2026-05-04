@@ -18,6 +18,7 @@ import {
   OnChainSection,
   VolumeSection,
 } from "./AnalysisMetricSections";
+import { FinnhubSentimentSection } from "./FinnhubSentiment";
 import { SectorPerformance } from "./SectorPerformance";
 
 // ---- Stablecoin exclusion set ----
@@ -2142,6 +2143,9 @@ export function AnalysisPanel() {
             </div>
           </div>
         </section>
+
+        {/* Finnhub Market Sentiment */}
+        <FinnhubSentimentSection />
 
         {/* Macro Markets */}
         <section data-ocid="analysis.section.macro">

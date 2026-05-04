@@ -1344,12 +1344,11 @@ export function EtfFlowsSection() {
     <section data-ocid="analysis.section.etf_flows" className="mb-8">
       <MetricSectionHeader
         title="US spot ETF — daily net flows"
-        subtitle="USD net flow from bitbo.io (BTC) and Finnhub (ETH)"
-        badge="Bitbo · Finnhub"
+        subtitle="USD net flow from bitbo.io (BTC)"
+        badge="Bitbo"
       />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <EtfNetFlowChart asset="btc" title="Bitcoin (BTC) spot ETFs" accent="oklch(0.820 0.160 60)" />
-        <EtfNetFlowChart asset="eth" title="Ethereum (ETH) spot ETFs" accent="oklch(0.785 0.135 280)" />
       </div>
     </section>
   );
@@ -1864,4 +1863,97 @@ export function DerivativesSection() {
       </div>
     </section>
   );
+}
+
+// =========================================================
+// SECTION 3: MARKET SENTIMENT (Finnhub)
+// =========================================================
+
+interface RecommendationPeriod {
+  period: string;
+  strongBuy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strongSell: number;
+}
+
+interface NewsSentimentData {
+  buzz: {
+    articlesInLastWeek: number;
+    buzz: number;
+    weeklyAverage: number;
+  };
+  sectorAverageBullishPercent: number;
+  sectorAverageNewsScore: number;
+  sentiment: {
+    bearishPercent: number;
+    bullishPercent: number;
+  };
+  symbol: string;
+}
+
+interface SocialSentimentPoint {
+  atTime: string;
+  mention: number;
+  positiveScore: number;
+  negativeScore: number;
+  positiveMention: number;
+  negativeMention: number;
+  score: number;
+}
+
+const CRYPTO_PROXIES = [
+  { symbol: "MSTR", name: "MicroStrategy", type: "BTC" },
+  { symbol: "COIN", name: "Coinbase", type: "Crypto" },
+  { symbol: "HOOD", name: "Robinhood", type: "Crypto" },
+];
+
+function useSentimentData(symbol: string) {
+  const [state, setState] = useState({
+    recommendations: [] as RecommendationPeriod[],
+    newsSentiment: null as NewsSentimentData | null,
+    socialSentiment: [] as SocialSentimentPoint[],
+    loading: true,
+  });
+  const mountedRef = useRef(true);
+
+  const fetch = useCallback(async () => {
+    const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+
+    try {
+      const recRes = await window.fetch(`${BACKEND_API}/api/analysis/recommendations/${symbol}`);
+      if (recRes.ok) {
+        const recData = await recRes.json();
+        if (mountedRef.current) {
+          setState((prev) => ({ ...prev, recommendations: recData.slice(0, 4), loading: false }));
+        }
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const newsRes = await window.fetch(`${BACKEND_API}/api/analysis/news-sentiment/${symbol}`);
+      if (newsRes.ok) {
+        const newsData = await newsRes.json();
+        if (mountedRef.current) setState((prev) => ({ ...prev, newsSentiment: newsData }));
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const socialRes = await window.fetch(`${BACKEND_API}/api/analysis/social-sentiment/${symbol}`);
+      if (socialRes.ok) {
+        const socialData = await socialRes.json();
+        if (mountedRef.current) setState((prev) => ({ ...prev, socialSentiment: socialData.data?.slice(-24) || [] }));
+      }
+    } catch { /* ignore */ }
+  }, [symbol]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    fetch();
+    const timer = setInterval(fetch, 5 * 60_000);
+    return () => { mountedRef.current = false; clearInterval(timer); };
+  }, [fetch]);
+
+  return state;
 }

@@ -269,191 +269,37 @@ function extractSoSoValueEthEtfData(html) {
   return out;
 }
 
-/** Fetch ETH ETF holdings from Finnhub and calculate flows */
-async function fetchFinnhubEthEtfFlows(days) {
+/** Fetch Finnhub analyst recommendations for a symbol */
+async function fetchFinnhubRecommendations(symbol) {
   if (!getFINNHUB_API_KEY()) {
     throw new Error('FINNHUB_API_KEY not set');
   }
 
-  // List of major US spot ETH ETF tickers
-  const ethEtfs = ['ETHA', 'ETHE', 'FETH', 'CETH', 'ETHW', 'ETHV', 'QETH', 'EZET'];
-  
-  const holdingsByDate = new Map();
-  
-  // Fetch holdings for each ETF
-  for (const ticker of ethEtfs) {
-    try {
-      const url = `https://finnhub.io/api/v1/etf/holdings?symbol=${ticker}&token=${getFINNHUB_API_KEY()}`;
-      const response = await axios.get(url, { timeout: 15000 });
-      const holdings = response.data?.holdings || [];
-      
-      holdings.forEach(holding => {
-        const date = holding.date;
-        if (!date) return;
-        
-        if (!holdingsByDate.has(date)) {
-          holdingsByDate.set(date, []);
-        }
-        holdingsByDate.get(date).push({
-          ticker,
-          shares: Number(holding.shares) || 0,
-          price: Number(holding.price) || 0,
-        });
-      });
-    } catch (e) {
-      console.warn(`Failed to fetch Finnhub holdings for ${ticker}:`, e.message);
-    }
-  }
-  
-  // Calculate total holdings per date
-  const totalHoldingsByDate = new Map();
-  holdingsByDate.forEach((holdings, date) => {
-    let totalValue = 0;
-    holdings.forEach(h => {
-      totalValue += h.shares * h.price;
-    });
-    totalHoldingsByDate.set(date, totalValue);
-  });
-  
-  // Sort dates
-  const sortedDates = Array.from(totalHoldingsByDate.keys()).sort();
-  
-  // Calculate flows (change in holdings)
-  const flows = [];
-  for (let i = 1; i < sortedDates.length; i++) {
-    const prevDate = sortedDates[i - 1];
-    const currDate = sortedDates[i];
-    const prevValue = totalHoldingsByDate.get(prevDate) || 0;
-    const currValue = totalHoldingsByDate.get(currDate) || 0;
-    const flow = currValue - prevValue;
-    
-    flows.push({
-      date: currDate,
-      netFlowUsd: flow,
-    });
-  }
-  
-  // Return last N days of flows
-  return flows.slice(-days);
+  const url = `https://finnhub.io/api/v1/stock/recommendation?symbol=${symbol}&token=${getFINNHUB_API_KEY()}`;
+  const response = await axios.get(url, { timeout: 15000 });
+  return response.data || [];
 }
 
-/** Fetch ETH ETF spot net flows from Dune Analytics */
-async function fetchDuneEthEtfFlows(days) {
-  if (!getDUNE_API_KEY()) {
-    throw new Error('DUNE_API_KEY not set');
+/** Fetch Finnhub news sentiment for a symbol */
+async function fetchFinnhubNewsSentiment(symbol) {
+  if (!getFINNHUB_API_KEY()) {
+    throw new Error('FINNHUB_API_KEY not set');
   }
 
-  // Dune query ID for Ethereum Spot ETF Net Inflows (updated daily)
-  // This query tracks daily net inflows for US spot ETH ETFs
-  // NOTE: Query ID 4356704 is a reference query. Verify it exists in your Dune account
-  // or create your own query at dune.com/queries and update this ID.
-  // Public queries can also be found in Dune's query library.
-  const DUNE_ETH_ETF_QUERY_ID = 4356704;
-
-  try {
-    // Step 1: Execute the query (or use existing results)
-    const executeUrl = `https://api.dune.com/api/v1/query/${DUNE_ETH_ETF_QUERY_ID}/execute`;
-    const executeRes = await axios.post(
-      executeUrl,
-      {},
-      {
-        headers: {
-          'X-Dune-API-Key': getDUNE_API_KEY(),
-          'Content-Type': 'application/json',
-        },
-        timeout: 30000,
-      }
-    );
-
-    const executionId = executeRes.data?.execution_id;
-    if (!executionId) {
-      throw new Error('No execution ID returned from Dune');
-    }
-
-    // Step 2: Poll for results (Dune queries may take time)
-    const maxRetries = 30;
-    const pollInterval = 2000; // 2 seconds
-
-    for (let i = 0; i < maxRetries; i++) {
-      await new Promise((resolve) => setTimeout(resolve, pollInterval));
-
-      const statusUrl = `https://api.dune.com/api/v1/execution/${executionId}/status`;
-      const statusRes = await axios.get(statusUrl, {
-        headers: { 'X-Dune-API-Key': getDUNE_API_KEY() },
-        timeout: 10000,
-      });
-
-      const state = statusRes.data?.state;
-      if (state === 'QUERY_STATE_COMPLETED') {
-        break;
-      } else if (state === 'QUERY_STATE_FAILED' || state === 'QUERY_STATE_CANCELLED') {
-        throw new Error(`Dune query failed with state: ${state}`);
-      }
-      // Continue polling if state is EXECUTING or PENDING
-    }
-
-    // Step 3: Fetch results
-    const resultsUrl = `https://api.dune.com/api/v1/execution/${executionId}/results`;
-    const resultsRes = await axios.get(resultsUrl, {
-      headers: { 'X-Dune-API-Key': getDUNE_API_KEY() },
-      timeout: 15000,
-    });
-
-    const rows = resultsRes.data?.result?.rows || [];
-
-    // Transform Dune results to our format
-    // Expected columns: date, net_inflow_usd (or similar)
-    const flows = rows
-      .map((row) => ({
-        date: row.date || row.day || row.timestamp,
-        netFlowUsd: Number(row.net_inflow_usd || row.net_flow_usd || row.inflow_usd || 0),
-      }))
-      .filter((row) => row.date && Number.isFinite(row.netFlowUsd))
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    // Return last N days
-    return flows.slice(-days);
-  } catch (error) {
-    console.error('Dune API error:', error.message);
-    throw error;
-  }
+  const url = `https://finnhub.io/api/v1/news-sentiment?symbol=${symbol}&token=${getFINNHUB_API_KEY()}`;
+  const response = await axios.get(url, { timeout: 15000 });
+  return response.data || {};
 }
 
-/** Fetch latest ETH ETF spot net flows from Dune using results endpoint (faster, cached) */
-async function fetchDuneEthEtfFlowsLatest(days) {
-  if (!getDUNE_API_KEY()) {
-    throw new Error('DUNE_API_KEY not set');
+/** Fetch Finnhub social sentiment for a symbol */
+async function fetchFinnhubSocialSentiment(symbol) {
+  if (!getFINNHUB_API_KEY()) {
+    throw new Error('FINNHUB_API_KEY not set');
   }
 
-  // Dune query ID for Ethereum Spot ETF Net Inflows
-  // NOTE: Query ID 4356704 is a reference. Verify it exists or create your own query.
-  const DUNE_ETH_ETF_QUERY_ID = 4356704;
-
-  try {
-    // Use the results endpoint to get latest cached results (much faster)
-    const resultsUrl = `https://api.dune.com/api/v1/query/${DUNE_ETH_ETF_QUERY_ID}/results`;
-    const resultsRes = await axios.get(resultsUrl, {
-      headers: { 'X-Dune-API-Key': getDUNE_API_KEY() },
-      timeout: 15000,
-    });
-
-    const rows = resultsRes.data?.result?.rows || [];
-
-    // Transform Dune results to our format
-    const flows = rows
-      .map((row) => ({
-        date: row.date || row.day || row.timestamp,
-        netFlowUsd: Number(row.net_inflow_usd || row.net_flow_usd || row.inflow_usd || row.net_flow || 0),
-      }))
-      .filter((row) => row.date && Number.isFinite(row.netFlowUsd))
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    // Return last N days
-    return flows.slice(-days);
-  } catch (error) {
-    console.error('Dune API error (latest):', error.message);
-    throw error;
-  }
+  const url = `https://finnhub.io/api/v1/stock/social-sentiment?symbol=${symbol}&token=${getFINNHUB_API_KEY()}`;
+  const response = await axios.get(url, { timeout: 15000 });
+  return response.data || {};
 }
 
 function proxiedGet(url) {
@@ -488,6 +334,42 @@ router.get('/funding/:symbol', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch funding' });
+  }
+});
+
+// Finnhub Analyst Recommendations
+router.get('/recommendations/:symbol', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const data = await fetchFinnhubRecommendations(symbol);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching recommendations:', error.message);
+    res.status(500).json({ error: 'Failed to fetch recommendations' });
+  }
+});
+
+// Finnhub News Sentiment
+router.get('/news-sentiment/:symbol', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const data = await fetchFinnhubNewsSentiment(symbol);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching news sentiment:', error.message);
+    res.status(500).json({ error: 'Failed to fetch news sentiment' });
+  }
+});
+
+// Finnhub Social Sentiment
+router.get('/social-sentiment/:symbol', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const data = await fetchFinnhubSocialSentiment(symbol);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching social sentiment:', error.message);
+    res.status(500).json({ error: 'Failed to fetch social sentiment' });
   }
 });
 
@@ -973,64 +855,8 @@ router.get('/etf-daily-flows/:asset', async (req, res) => {
 
       setCached(cacheKey, result, ETF_FLOW_CACHE_TTL_MS);
       res.json(result);
-    } else if (asset === 'eth') {
-      // ETH ETF flows: Try Dune first, then Finnhub as fallback
-      const cacheKey = `etf-daily-flows-eth-${days}-dune-v1`;
-      const cached = getCached(cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-
-      // Try Dune API first for ETH ETF spot net flows
-      if (getDUNE_API_KEY()) {
-        try {
-          data = await fetchDuneEthEtfFlowsLatest(days);
-          if (data.length > 0) {
-            source = 'dune';
-            sourceDetail = 'Dune Analytics — US spot Ethereum ETF daily net inflows (USD) from Dune query.';
-          } else {
-            sourceDetail = 'Dune API returned no data, will try fallback.';
-          }
-        } catch (e) {
-          console.warn('Dune ETH ETF:', e.message);
-          sourceDetail = `Dune API failed: ${e.message}`;
-        }
-      } else {
-        sourceDetail = 'DUNE_API_KEY not set, skipping Dune source.';
-      }
-
-      // Fallback to Finnhub if Dune failed or returned no data
-      if (data.length === 0 && getFINNHUB_API_KEY()) {
-        try {
-          const finnhubData = await fetchFinnhubEthEtfFlows(days);
-          if (finnhubData.length > 0) {
-            data = finnhubData;
-            source = 'finnhub';
-            sourceDetail = 'Finnhub API — US spot Ethereum ETF net flow (USD) calculated from daily holdings changes. (Dune fallback)';
-          } else {
-            sourceDetail += ' Finnhub API also returned no holdings data.';
-          }
-        } catch (e) {
-          console.warn('Finnhub ETH ETF fallback:', e.message);
-          sourceDetail += ` Finnhub fallback failed: ${e.message}`;
-        }
-      }
-
-      const result = {
-        asset: 'eth',
-        metric: 'etf_net_flow_usd',
-        unit: 'USD',
-        source,
-        sourceDetail,
-        description: 'US spot Ethereum ETF daily net flow (inflows minus outflows).',
-        days,
-        data,
-      };
-
-      setCached(cacheKey, result, ETF_FLOW_CACHE_TTL_MS);
-      res.json(result);
     } else {
-      return res.status(400).json({ error: 'asset must be btc or eth' });
+      return res.status(400).json({ error: 'asset must be btc' });
     }
   } catch (error) {
     console.error('Error fetching ETF daily flows:', error.message);
