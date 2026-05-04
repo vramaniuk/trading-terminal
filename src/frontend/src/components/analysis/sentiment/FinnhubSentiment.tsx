@@ -30,6 +30,8 @@ const CRYPTO_PROXIES = [
   { symbol: "MSTR", name: "MicroStrategy" },
   { symbol: "COIN", name: "Coinbase" },
   { symbol: "HOOD", name: "Robinhood" },
+  { symbol: "AMZN", name: "Amazon" },
+  { symbol: "NVDA", name: "Nvidia" },
 ];
 
 function useSentimentData(symbol: string) {

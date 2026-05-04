@@ -681,6 +681,8 @@ const CRYPTO_PROXIES = [
   { symbol: "MSTR", name: "MicroStrategy", type: "BTC" },
   { symbol: "COIN", name: "Coinbase", type: "Crypto" },
   { symbol: "HOOD", name: "Robinhood", type: "Crypto" },
+  { symbol: "AMZN", name: "Amazon", type: "Tech" },
+  { symbol: "NVDA", name: "Nvidia", type: "Tech" },
 ];
 
 function useSentimentData(symbol: string) {
@@ -730,4 +732,212 @@ function useSentimentData(symbol: string) {
   }, [fetch]);
 
   return state;
+}
+
+export function SentimentSection() {
+  return (
+    <section data-ocid="analysis.section.sentiment" className="mb-8">
+      <MetricSectionHeader
+        title="Market Sentiment"
+        subtitle="Analyst recommendations & news sentiment from Finnhub"
+        badge="Finnhub"
+      />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+        {CRYPTO_PROXIES.map((proxy) => (
+          <SentimentCard key={proxy.symbol} proxy={proxy} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SentimentCard({ proxy }: { proxy: typeof CRYPTO_PROXIES[0] }) {
+  const { recommendations, newsSentiment, loading } = useSentimentData(proxy.symbol);
+
+  // Calculate consensus from recommendations
+  const latestRec = recommendations[0];
+  const total = latestRec
+    ? latestRec.strongBuy + latestRec.buy + latestRec.hold + latestRec.sell + latestRec.strongSell
+    : 0;
+  const bullishCount = latestRec ? latestRec.strongBuy + latestRec.buy : 0;
+  const bearishCount = latestRec ? latestRec.sell + latestRec.strongSell : 0;
+  const bullishPct = total > 0 ? (bullishCount / total) * 100 : null;
+  const bearishPct = total > 0 ? (bearishCount / total) * 100 : null;
+
+  // News sentiment
+  const newsBullish = newsSentiment?.sentiment?.bullishPercent ?? null;
+  const newsBearish = newsSentiment?.sentiment?.bearishPercent ?? null;
+
+  // Determine overall signal
+  const signal: MetricCardProps["signal"] =
+    bullishPct != null && bullishPct > 60
+      ? "bullish"
+      : bearishPct != null && bearishPct > 40
+        ? "bearish"
+        : "neutral";
+
+  const signalText =
+    signal === "bullish"
+      ? "Strong analyst consensus — bullish"
+      : signal === "bearish"
+        ? "Negative analyst consensus — bearish"
+        : "Mixed analyst signals — neutral";
+
+  return (
+    <div
+      className="rounded-xl p-4 flex flex-col gap-3 min-w-0"
+      style={CARD_STYLE}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+          style={{
+            background:
+              proxy.type === "BTC"
+                ? "oklch(0.820 0.160 60 / 0.12)"
+                : proxy.type === "Crypto"
+                  ? "oklch(0.785 0.135 200 / 0.12)"
+                  : "oklch(0.620 0.140 280 / 0.12)",
+            color:
+              proxy.type === "BTC"
+                ? "oklch(0.820 0.160 60)"
+                : proxy.type === "Crypto"
+                  ? "oklch(0.785 0.135 200)"
+                  : "oklch(0.720 0.140 280)",
+          }}
+        >
+          <span className="text-xs font-bold">{proxy.symbol.slice(0, 2)}</span>
+        </div>
+        <div>
+          <div className="text-xs font-semibold" style={{ color: C_FG }}>
+            {proxy.name}
+          </div>
+          <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
+            {proxy.symbol} · {proxy.type}
+          </div>
+        </div>
+      </div>
+
+      {/* Loading */}
+      {loading && (
+        <>
+          <Skeleton className="h-6 w-20 rounded" style={{ background: "oklch(1 0 0 / 0.06)" }} />
+          <Skeleton className="h-4 w-full rounded" style={{ background: "oklch(1 0 0 / 0.06)" }} />
+        </>
+      )}
+
+      {/* Analyst Consensus */}
+      {!loading && latestRec && (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px]" style={{ color: C_DIM }}>
+              Analyst Consensus
+            </span>
+            <span
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+              style={{
+                background:
+                  signal === "bullish"
+                    ? "oklch(0.723 0.185 150 / 0.15)"
+                    : signal === "bearish"
+                      ? "oklch(0.637 0.220 25 / 0.15)"
+                      : "oklch(0.600 0.020 240 / 0.15)",
+                color:
+                  signal === "bullish"
+                    ? C_GREEN
+                    : signal === "bearish"
+                      ? C_RED
+                      : C_MID,
+              }}
+            >
+              {signal === "bullish" ? "Buy" : signal === "bearish" ? "Sell" : "Hold"}
+            </span>
+          </div>
+
+          {/* Bullish/Bearish bar */}
+          {bullishPct != null && bearishPct != null && (
+            <>
+              <div className="flex gap-2 text-[10px] font-mono">
+                <span style={{ color: C_GREEN }}>↑ {bullishPct.toFixed(0)}%</span>
+                <span style={{ color: C_RED }}>↓ {bearishPct.toFixed(0)}%</span>
+              </div>
+              <div
+                className="relative h-2 rounded-full overflow-hidden"
+                style={{ background: "oklch(1 0 0 / 0.07)" }}
+              >
+                <div
+                  className="absolute left-0 top-0 h-full rounded-full"
+                  style={{ width: `${bullishPct}%`, background: C_GREEN }}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Recommendation breakdown */}
+          <div className="grid grid-cols-5 gap-1 text-[9px] font-mono text-center">
+            <div>
+              <div style={{ color: C_GREEN }}>{latestRec.strongBuy}</div>
+              <div style={{ color: C_DIM }}>SB</div>
+            </div>
+            <div>
+              <div style={{ color: "oklch(0.723 0.185 150)" }}>{latestRec.buy}</div>
+              <div style={{ color: C_DIM }}>B</div>
+            </div>
+            <div>
+              <div style={{ color: C_MID }}>{latestRec.hold}</div>
+              <div style={{ color: C_DIM }}>H</div>
+            </div>
+            <div>
+              <div style={{ color: "oklch(0.820 0.160 60)" }}>{latestRec.sell}</div>
+              <div style={{ color: C_DIM }}>S</div>
+            </div>
+            <div>
+              <div style={{ color: C_RED }}>{latestRec.strongSell}</div>
+              <div style={{ color: C_DIM }}>SS</div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* News Sentiment */}
+      {!loading && newsSentiment && (
+        <div className="pt-2 border-t border-white/10">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px]" style={{ color: C_DIM }}>
+              News Sentiment
+            </span>
+            {newsSentiment.buzz?.buzz != null && (
+              <span className="text-[9px] font-mono" style={{ color: C_MID }}>
+                Buzz: {newsSentiment.buzz.buzz.toFixed(2)}x
+              </span>
+            )}
+          </div>
+          {newsBullish != null && newsBearish != null && (
+            <div className="flex gap-2 text-[10px] font-mono">
+              <span style={{ color: C_GREEN }}>🟢 {newsBullish.toFixed(0)}%</span>
+              <span style={{ color: C_RED }}>🔴 {newsBearish.toFixed(0)}%</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Signal text */}
+      {!loading && (
+        <div
+          className="text-[10px] leading-relaxed"
+          style={{
+            color:
+              signal === "bullish"
+                ? C_GREEN
+                : signal === "bearish"
+                  ? C_RED
+                  : C_MID,
+          }}
+        >
+          {signalText}
+        </div>
+      )}
+    </div>
+  );
 }
