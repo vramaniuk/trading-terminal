@@ -78,7 +78,7 @@ function useSentimentData(symbol: string) {
   return state;
 }
 
-export function AnalystRecommendations({ symbol }: { symbol: string }) {
+export function AnalystRecommendations({ symbol, name }: { symbol: string; name: string }) {
   const { recommendations, loading } = useSentimentData(symbol);
   const latest = recommendations[0];
   const total = latest ? latest.strongBuy + latest.buy + latest.hold + latest.sell + latest.strongSell : 0;
@@ -93,8 +93,8 @@ export function AnalystRecommendations({ symbol }: { symbol: string }) {
             <Users className="w-3.5 h-3.5" />
           </div>
           <div>
-            <div className="text-xs font-semibold" style={{ color: C_FG }}>{symbol} Analyst Ratings</div>
-            <div className="text-[10px] font-mono" style={{ color: C_DIM }}>Wall Street consensus</div>
+            <div className="text-xs font-semibold" style={{ color: C_FG }}>{name}</div>
+            <div className="text-[10px] font-mono" style={{ color: C_DIM }}>{symbol} · Wall Street</div>
           </div>
         </div>
         <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "oklch(0.785 0.135 200 / 0.10)", color: C_CYAN, border: "1px solid oklch(0.785 0.135 200 / 0.25)" }}>Finnhub</span>
@@ -232,16 +232,12 @@ export function FinnhubSentimentSection() {
     <section data-ocid="analysis.section.sentiment" className="mb-8">
       <SectionHeader
         title="Market Sentiment"
-        subtitle="Analyst ratings, news & social for crypto-correlated equities"
+        subtitle="Analyst ratings for crypto-correlated equities"
         badge="Finnhub"
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
         {CRYPTO_PROXIES.map((proxy) => (
-          <div key={proxy.symbol} className="contents">
-            <AnalystRecommendations symbol={proxy.symbol} />
-            <NewsSentimentCard symbol={proxy.symbol} />
-            <SocialSentimentCard symbol={proxy.symbol} />
-          </div>
+          <AnalystRecommendations key={proxy.symbol} symbol={proxy.symbol} name={proxy.name} />
         ))}
       </div>
     </section>
