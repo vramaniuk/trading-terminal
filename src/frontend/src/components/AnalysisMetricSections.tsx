@@ -344,20 +344,64 @@ function useDerivativesData(): DerivativesData {
             ethVol = ethData.market_data?.total_volume?.usd ?? null;
           }
         } catch {
-          // Fallback values if CoinGecko fetch fails
-          btcCap = btcCap ?? 1_350_000_000_000;
-          ethCap = ethCap ?? 420_000_000_000;
-          btcVol = btcVol ?? 45_000_000_000;
-          ethVol = ethVol ?? 18_000_000_000;
+          // CoinGecko data unavailable
         }
 
-        // Static derivatives metrics (to be replaced with real data in future)
+        // Fetch real derivatives data from backend (Binance + Amberdata)
+        let longShortRatio: number | null = null;
+        let longPct: number | null = null;
+        let shortPct: number | null = null;
+        let takerBuySellRatio: number | null = null;
+        let putCallRatio: number | null = null;
+
+        try {
+          const [lsRes, takerRes, pcRes] = await Promise.all([
+            fetch(`${BACKEND_API}/api/analysis/longshort/BTCUSDT?period=1d`),
+            fetch(`${BACKEND_API}/api/analysis/taker-ratio/BTCUSDT?period=1d`),
+            fetch(`${BACKEND_API}/api/analysis/put-call-ratio/BTC`),
+          ]);
+
+          if (lsRes.ok) {
+            const lsData = await lsRes.json() as {
+              longShortRatio: number;
+              longAccount: number;
+              shortAccount: number;
+              timestamp: string;
+            };
+            longShortRatio = lsData.longShortRatio;
+            longPct = lsData.longAccount * 100;
+            shortPct = lsData.shortAccount * 100;
+          }
+
+          if (takerRes.ok) {
+            const takerData = await takerRes.json() as {
+              buySellRatio: number;
+              buyVol: number;
+              sellVol: number;
+              timestamp: string;
+            };
+            takerBuySellRatio = takerData.buySellRatio;
+          }
+
+          if (pcRes.ok) {
+            const pcData = await pcRes.json() as {
+              putCallRatioOpenInterest: number;
+              putCallRatioVolume24hr: number;
+              timestamp: number;
+            };
+            putCallRatio = pcData.putCallRatioVolume24hr;
+          }
+        } catch (error) {
+          console.warn("Failed to fetch derivatives ratios:", error);
+        }
+
+        // Set derivatives metrics - null if data unavailable
         setData({
-          longShortRatio: 1.15,
-          longPct: 53.5,
-          shortPct: 46.5,
-          takerBuySellRatio: 1.02,
-          putCallRatio: 0.75,
+          longShortRatio,
+          longPct,
+          shortPct,
+          takerBuySellRatio,
+          putCallRatio,
           btcData: {
             name: "Bitcoin",
             symbol: "BTC",
@@ -381,7 +425,7 @@ function useDerivativesData(): DerivativesData {
           loading: false,
         });
       } catch {
-        // Set error state with fallback data
+        // Set error state - all data unavailable
         setData({
           longShortRatio: null,
           longPct: null,
@@ -467,7 +511,7 @@ export function DerivativesSection() {
       <MetricSectionHeader
         title="Derivatives & Market Structure"
         subtitle="Futures positioning, options sentiment, and spot volume"
-        badge="Binance / Deribit / CoinGecko"
+        badge="Binance / Amberdata / CoinGecko"
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
         {/* Long/Short Ratio */}
@@ -475,24 +519,36 @@ export function DerivativesSection() {
           className="rounded-xl p-4 flex flex-col gap-2 min-w-0"
           style={CARD_STYLE}
         >
-          <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                style={{
+                  background: "oklch(0.785 0.135 200 / 0.12)",
+                  color: C_CYAN,
+                }}
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <div className="text-xs font-semibold" style={{ color: C_FG }}>
+                  Long/Short Ratio
+                </div>
+                <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
+                  BTCUSDT PERP accounts
+                </div>
+              </div>
+            </div>
+            <span
+              className="text-[10px] font-semibold shrink-0 px-2 py-0.5 rounded-full font-mono"
               style={{
-                background: "oklch(0.785 0.135 200 / 0.12)",
+                background: "oklch(0.785 0.135 200 / 0.10)",
                 color: C_CYAN,
+                border: "1px solid oklch(0.785 0.135 200 / 0.25)",
               }}
             >
-              <TrendingUp className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold" style={{ color: C_FG }}>
-                Long/Short Ratio
-              </div>
-              <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
-                BTCUSDT PERP accounts
-              </div>
-            </div>
+              Binance
+            </span>
           </div>
           {d.loading ? (
             <Skeleton
@@ -576,7 +632,7 @@ export function DerivativesSection() {
         {/* Put/Call Ratio */}
         <MetricCard
           label="Options Put/Call Ratio"
-          sublabel="BTC options volume (Deribit)"
+          sublabel="BTC options volume (Amberdata)"
           icon={<BarChart2 className="w-3.5 h-3.5" />}
           loading={d.loading}
           value={
@@ -589,7 +645,7 @@ export function DerivativesSection() {
           }
           signal={pc.signal}
           signalText={pc.text}
-          badge="Deribit"
+          badge="Amberdata"
         />
 
         {/* BTC Volume Card */}
@@ -597,24 +653,36 @@ export function DerivativesSection() {
           className="rounded-xl p-4 flex flex-col gap-2 min-w-0"
           style={CARD_STYLE}
         >
-          <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                style={{
+                  background: "oklch(0.785 0.135 200 / 0.12)",
+                  color: C_CYAN,
+                }}
+              >
+                <Bitcoin className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <div className="text-xs font-semibold" style={{ color: C_FG }}>
+                  {d.btcData.name}
+                </div>
+                <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
+                  {d.btcData.symbol}
+                </div>
+              </div>
+            </div>
+            <span
+              className="text-[10px] font-semibold shrink-0 px-2 py-0.5 rounded-full font-mono"
               style={{
-                background: "oklch(0.785 0.135 200 / 0.12)",
+                background: "oklch(0.785 0.135 200 / 0.10)",
                 color: C_CYAN,
+                border: "1px solid oklch(0.785 0.135 200 / 0.25)",
               }}
             >
-              <Bitcoin className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold" style={{ color: C_FG }}>
-                {d.btcData.name}
-              </div>
-              <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
-                {d.btcData.symbol}
-              </div>
-            </div>
+              dzengi
+            </span>
           </div>
           {d.loading ? (
             <Skeleton
@@ -655,24 +723,36 @@ export function DerivativesSection() {
           className="rounded-xl p-4 flex flex-col gap-2 min-w-0"
           style={CARD_STYLE}
         >
-          <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                style={{
+                  background: "oklch(0.620 0.140 280 / 0.12)",
+                  color: "oklch(0.720 0.140 280)",
+                }}
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <div className="text-xs font-semibold" style={{ color: C_FG }}>
+                  {d.ethData.name}
+                </div>
+                <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
+                  {d.ethData.symbol}
+                </div>
+              </div>
+            </div>
+            <span
+              className="text-[10px] font-semibold shrink-0 px-2 py-0.5 rounded-full font-mono"
               style={{
-                background: "oklch(0.620 0.140 280 / 0.12)",
+                background: "oklch(0.620 0.140 280 / 0.10)",
                 color: "oklch(0.720 0.140 280)",
+                border: "1px solid oklch(0.620 0.140 280 / 0.25)",
               }}
             >
-              <DollarSign className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold" style={{ color: C_FG }}>
-                {d.ethData.name}
-              </div>
-              <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
-                {d.ethData.symbol}
-              </div>
-            </div>
+              dzengi
+            </span>
           </div>
           {d.loading ? (
             <Skeleton
@@ -963,10 +1043,10 @@ function SentimentCard({ proxy }: { proxy: typeof CRYPTO_PROXIES[0] }) {
               </span>
             )}
           </div>
-          {newsBullish != null && newsBearish != null && (
+          {newsSentiment?.bullish != null && newsSentiment?.bearish != null && (
             <div className="flex gap-2 text-[10px] font-mono">
-              <span style={{ color: C_GREEN }}>🟢 {newsBullish.toFixed(0)}%</span>
-              <span style={{ color: C_RED }}>🔴 {newsBearish.toFixed(0)}%</span>
+              <span style={{ color: C_GREEN }}>🟢 {newsSentiment.bullish.toFixed(0)}%</span>
+              <span style={{ color: C_RED }}>🔴 {newsSentiment.bearish.toFixed(0)}%</span>
             </div>
           )}
         </div>

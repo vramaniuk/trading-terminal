@@ -10,7 +10,7 @@ const OKX_API = 'https://www.okx.com';
 // Lazy getters for env vars - ensures they are read AFTER dotenv.config() runs
 const getCOINGECKO_API_KEY = () => process.env.COINGECKO_API_KEY;
 const getFINNHUB_API_KEY = () => process.env.FINNHUB_API_KEY;
-const getDUNE_API_KEY = () => process.env.DUNE_API_KEY;
+const getAMBERDATA_API_KEY = () => process.env.AMBERDATA_API_KEY;
 const BITBO_BTC_ETF_URL = 'https://bitbo.io/treasuries/etf-flows/';
 
 /** Bitbo ETF series updates daily; cache responses to limit fetches. */
@@ -313,6 +313,102 @@ router.get('/funding/:symbol', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch funding' });
+  }
+});
+
+// Long/Short Ratio - Aggregated account ratio from Binance
+router.get('/longshort/:symbol', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const { period = '1d' } = req.query;
+    const url = `${BINANCE_FAPI}/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=${period}`;
+    let response = await axios.get(url, { timeout: 10000 }).catch(() =>
+      axios.get(proxiedGet(url), { timeout: 15000 })
+    );
+
+    const data = response.data;
+    if (!Array.isArray(data) || data.length === 0) {
+      return res.status(404).json({ error: 'No data available' });
+    }
+
+    const latest = data[data.length - 1];
+    res.json({
+      symbol,
+      longShortRatio: Number(latest.longShortRatio),
+      longAccount: Number(latest.longAccount),
+      shortAccount: Number(latest.shortAccount),
+      timestamp: latest.timestamp,
+      source: 'Binance'
+    });
+  } catch (error) {
+    console.error('Error fetching long/short ratio:', error.message);
+    res.status(500).json({ error: 'Failed to fetch long/short ratio' });
+  }
+});
+
+// Taker Buy/Sell Ratio from Binance
+router.get('/taker-ratio/:symbol', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const { period = '1d' } = req.query;
+    const url = `${BINANCE_FAPI}/futures/data/takerlongshortRatio?symbol=${symbol}&period=${period}`;
+    let response = await axios.get(url, { timeout: 10000 }).catch(() =>
+      axios.get(proxiedGet(url), { timeout: 15000 })
+    );
+
+    const data = response.data;
+    if (!Array.isArray(data) || data.length === 0) {
+      return res.status(404).json({ error: 'No data available' });
+    }
+
+    const latest = data[data.length - 1];
+    res.json({
+      symbol,
+      buySellRatio: Number(latest.buySellRatio),
+      buyVol: Number(latest.buyVol),
+      sellVol: Number(latest.sellVol),
+      timestamp: latest.timestamp,
+      source: 'Binance'
+    });
+  } catch (error) {
+    console.error('Error fetching taker ratio:', error.message);
+    res.status(500).json({ error: 'Failed to fetch taker ratio' });
+  }
+});
+
+// Put/Call Ratio from Amberdata (Deribit options data)
+router.get('/put-call-ratio/:currency', async (req, res) => {
+  try {
+    const { currency } = req.params;
+    const apiKey = getAMBERDATA_API_KEY();
+
+    if (!apiKey) {
+      return res.status(503).json({ error: 'Amberdata API key not configured' });
+    }
+
+    const url = `https://api.amberdata.com/markets/derivatives/analytics/trades-flow/put-call-ratio?currency=${currency.toUpperCase()}&exchange=deribit&timeRange=1d`;
+    const response = await axios.get(url, {
+      headers: { 'x-api-key': apiKey },
+      timeout: 15000
+    });
+
+    const data = response.data?.payload?.data;
+    if (!Array.isArray(data) || data.length === 0) {
+      return res.status(404).json({ error: 'No data available' });
+    }
+
+    const latest = data[0]; // Most recent data point
+    res.json({
+      currency: currency.toUpperCase(),
+      exchange: 'deribit',
+      putCallRatioOpenInterest: latest.putCallRatioOpenInterest,
+      putCallRatioVolume24hr: latest.putCallRatioVolume24hr,
+      timestamp: latest.timestamp,
+      source: 'Amberdata'
+    });
+  } catch (error) {
+    console.error('Error fetching put-call ratio:', error.message);
+    res.status(500).json({ error: 'Failed to fetch put-call ratio' });
   }
 });
 
@@ -891,14 +987,12 @@ router.get('/eth/large-transactions', async (req, res) => {
     const { min_value = 1, limit = 50 } = req.query;
     const apiKey = process.env.ETHERSCAN_API_KEY || '';
     const minValueWei = BigInt(min_value) * BigInt(10 ** 18); // Convert ETH to Wei
-    console.log(`Fetching ETH transactions with min_value=${min_value}, limit=${limit}`);
-    
+
     // Get latest block number first
     const blockUrl = `https://api.etherscan.io/v2/api?chainid=1&module=proxy&action=eth_blockNumber&apikey=${apiKey}`;
     const blockRes = await axios.get(blockUrl);
     const latestBlock = parseInt(blockRes.data.result, 16);
-    console.log(`Latest block: ${latestBlock}`);
-    
+
     const transactions = [];
     let totalTxCount = 0;
     let whaleTxCount = 0;
@@ -942,17 +1036,16 @@ router.get('/eth/large-transactions', async (req, res) => {
     }
     
     const whalePercentage = totalTxCount > 0 ? (whaleTxCount / totalTxCount) * 100 : 0;
-    console.log(`Total transactions: ${totalTxCount}, Whale transactions: ${whaleTxCount}, Whale percentage: ${whalePercentage.toFixed(2)}%`);
-    
-    res.json({ 
-      data: { 
+
+    res.json({
+      data: {
         transactions,
         stats: {
           totalTransactions: totalTxCount,
           whaleTransactions: whaleTxCount,
           whalePercentage: whalePercentage.toFixed(2)
         }
-      } 
+      }
     });
   } catch (error) {
     console.error('Error fetching ETH large transactions:', error);
@@ -975,13 +1068,11 @@ router.get('/blockchair/btc/stats', async (req, res) => {
 router.get('/btc/large-transactions', async (req, res) => {
   try {
     const { min_amount = 1, limit = 50 } = req.query;
-    console.log(`Fetching BTC transactions with min_amount=${min_amount}, limit=${limit}`);
     // Get recent blocks from mempool.space (last 24h = ~144 blocks)
     const blocksUrl = 'https://mempool.space/api/blocks';
     const blocksRes = await axios.get(blocksUrl);
     const blocks = blocksRes.data?.slice(0, 144) || [];
-    console.log(`Fetched ${blocks.length} blocks for 24h period`);
-    
+
     const transactions = [];
     let totalTxCount = 0;
     let whaleTxCount = 0;
@@ -1019,17 +1110,16 @@ router.get('/btc/large-transactions', async (req, res) => {
     }
     
     const whalePercentage = totalTxCount > 0 ? (whaleTxCount / totalTxCount) * 100 : 0;
-    console.log(`Total transactions: ${totalTxCount}, Whale transactions: ${whaleTxCount}, Whale percentage: ${whalePercentage.toFixed(2)}%`);
-    
-    res.json({ 
-      data: { 
+
+    res.json({
+      data: {
         transactions,
         stats: {
           totalTransactions: totalTxCount,
           whaleTransactions: whaleTxCount,
           whalePercentage: whalePercentage.toFixed(2)
         }
-      } 
+      }
     });
   } catch (error) {
     console.error('Error fetching large transactions:', error);
@@ -1126,42 +1216,7 @@ async function fetchCoinMetricsAggregateBalance(asset, days) {
   }));
 }
 
-// Generate realistic mock data as final fallback
-function generateMockBalanceData(exchange, asset, days) {
-  const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const data = [];
-
-  // Base values from CoinGlass real data (BTC balances as of reference date)
-  const baseValues = {
-    coinbasepro: { btc: 854295, eth: 5500000 },  // #1 - Coinbase
-    binance: { btc: 611674, eth: 4800000 },      // #2 - Binance
-    bitfinex: { btc: 405743, eth: 3200000 },    // #3 - Bitfinex
-    kraken: { btc: 149229, eth: 1200000 },      // #4 - Kraken
-    okx: { btc: 101397, eth: 850000 },           // #5 - OKX
-    gemini: { btc: 94352, eth: 780000 },         // #6 - Gemini
-    bybit: { btc: 46876, eth: 420000 }           // #8 - Bybit
-  };
-
-  const baseValue = baseValues[exchange]?.[asset] || 100000;
-
-  for (let i = days; i >= 0; i--) {
-    const date = new Date(now - i * dayMs);
-    const daysAgo = days - i;
-    const trendFactor = 1 + (daysAgo * 0.001 * (Math.random() - 0.5));
-    const dailyVariation = 0.98 + Math.random() * 0.04;
-    const value = baseValue * trendFactor * dailyVariation;
-
-    data.push({
-      date: date.toISOString().split('T')[0],
-      value: Math.round(value)
-    });
-  }
-
-  return { exchange, asset, data };
-}
-
-// Exchange balance history - tries CoinMetrics, falls back to mock
+// Exchange balance history - tries CoinMetrics, returns unavailable if no data
 router.get('/exchange-balances', async (req, res) => {
   try {
     const { exchange, asset, days = 30 } = req.query;
@@ -1172,10 +1227,7 @@ router.get('/exchange-balances', async (req, res) => {
     // Try CoinMetrics exchange-specific data first
     try {
       result = await fetchCoinMetricsExchangeBalance(exchange, asset, numDays);
-      console.log(`CoinMetrics exchange data fetched for ${exchange}/${asset}`);
     } catch (exchangeError) {
-      console.log(`Exchange-specific data failed for ${exchange}/${asset}:`, exchangeError.message);
-
       // Try aggregate data and estimate per-exchange
       try {
         const aggregateData = await fetchCoinMetricsAggregateBalance(asset, numDays);
@@ -1201,20 +1253,15 @@ router.get('/exchange-balances', async (req, res) => {
             value: Math.round(d.totalSupply * share)
           }))
         };
-        console.log(`CoinMetrics aggregate data used for ${exchange}/${asset}`);
       } catch (aggregateError) {
-        console.log(`Aggregate data failed, using mock for ${exchange}/${asset}:`, aggregateError.message);
-        result = generateMockBalanceData(exchange, asset, numDays);
+        result = { exchange, asset, data: [] };
       }
     }
 
     res.json(result);
   } catch (error) {
     console.error('Error in exchange-balances endpoint:', error.message);
-    // Return mock data as last resort to prevent frontend errors
-    const { exchange, asset, days = 30 } = req.query;
-    const mockData = generateMockBalanceData(exchange, asset, parseInt(days));
-    res.json(mockData);
+    res.status(500).json({ error: 'Failed to fetch exchange balance data' });
   }
 });
 
@@ -1282,20 +1329,12 @@ router.get('/open-interest', async (req, res) => {
       const priceRes = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
       price = Number.parseFloat(priceRes.data.price || 0);
     } catch {
-      price = assetUpper === 'BTC' ? 76000 : 4000; // Fallback prices
+      price = 0;
     }
-    
+
     // Calculate total OI in USD
     const totalOI = (bybitOI + okxOI) * price;
-    
-    // Generate mock history for sparkline (since direct APIs don't provide history)
-    const history = [];
-    const now = Date.now();
-    for (let i = 48; i >= 0; i--) {
-      const variation = 0.95 + Math.random() * 0.1;
-      history.push(totalOI * variation);
-    }
-    
+
     res.json({
       asset: assetUpper,
       latest: {
@@ -1303,7 +1342,7 @@ router.get('/open-interest', async (req, res) => {
         value_usd: totalOI,
         time: new Date().toISOString()
       },
-      history
+      history: []
     });
   } catch (error) {
     console.error('Error fetching open interest:', error);
