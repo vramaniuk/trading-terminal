@@ -280,27 +280,6 @@ async function fetchFinnhubRecommendations(symbol) {
   return response.data || [];
 }
 
-/** Fetch Finnhub news sentiment for a symbol */
-async function fetchFinnhubNewsSentiment(symbol) {
-  if (!getFINNHUB_API_KEY()) {
-    throw new Error('FINNHUB_API_KEY not set');
-  }
-
-  const url = `https://finnhub.io/api/v1/news-sentiment?symbol=${symbol}&token=${getFINNHUB_API_KEY()}`;
-  const response = await axios.get(url, { timeout: 15000 });
-  return response.data || {};
-}
-
-/** Fetch Finnhub social sentiment for a symbol */
-async function fetchFinnhubSocialSentiment(symbol) {
-  if (!getFINNHUB_API_KEY()) {
-    throw new Error('FINNHUB_API_KEY not set');
-  }
-
-  const url = `https://finnhub.io/api/v1/stock/social-sentiment?symbol=${symbol}&token=${getFINNHUB_API_KEY()}`;
-  const response = await axios.get(url, { timeout: 15000 });
-  return response.data || {};
-}
 
 function proxiedGet(url) {
   return `${CORSPROXY}${encodeURIComponent(url)}`;
@@ -349,29 +328,6 @@ router.get('/recommendations/:symbol', async (req, res) => {
   }
 });
 
-// Finnhub News Sentiment
-router.get('/news-sentiment/:symbol', async (req, res) => {
-  try {
-    const { symbol } = req.params;
-    const data = await fetchFinnhubNewsSentiment(symbol);
-    res.json(data);
-  } catch (error) {
-    console.error('Error fetching news sentiment:', error.message);
-    res.status(500).json({ error: 'Failed to fetch news sentiment' });
-  }
-});
-
-// Finnhub Social Sentiment
-router.get('/social-sentiment/:symbol', async (req, res) => {
-  try {
-    const { symbol } = req.params;
-    const data = await fetchFinnhubSocialSentiment(symbol);
-    res.json(data);
-  } catch (error) {
-    console.error('Error fetching social sentiment:', error.message);
-    res.status(500).json({ error: 'Failed to fetch social sentiment' });
-  }
-});
 
 // Macro Data
 router.get('/macro/:symbol', async (req, res) => {

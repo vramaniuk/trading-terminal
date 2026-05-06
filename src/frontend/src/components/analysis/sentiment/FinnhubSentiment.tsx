@@ -1,5 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Users, TrendingUp } from "lucide-react";
+import { Users } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { C_GREEN, C_RED, C_YELLOW, C_CYAN, C_FG, C_DIM, C_MID } from "@/lib/analysisConstants";
 import { SectionHeader } from "@/components/analysis/common/SectionHeader";
@@ -13,18 +13,6 @@ interface RecommendationPeriod {
   strongSell: number;
 }
 
-interface NewsSentimentData {
-  buzz: { articlesInLastWeek: number; buzz: number; weeklyAverage: number };
-  sentiment: { bearishPercent: number; bullishPercent: number };
-}
-
-interface SocialSentimentPoint {
-  atTime: string;
-  mention: number;
-  positiveMention: number;
-  negativeMention: number;
-  score: number;
-}
 
 const CRYPTO_PROXIES = [
   { symbol: "MSTR", name: "MicroStrategy" },
@@ -37,8 +25,6 @@ const CRYPTO_PROXIES = [
 function useSentimentData(symbol: string) {
   const [state, setState] = useState({
     recommendations: [] as RecommendationPeriod[],
-    newsSentiment: null as NewsSentimentData | null,
-    socialSentiment: [] as SocialSentimentPoint[],
     loading: true,
   });
   const mountedRef = useRef(true);
@@ -50,20 +36,6 @@ function useSentimentData(symbol: string) {
       if (recRes.ok) {
         const recData = await recRes.json();
         if (mountedRef.current) setState((prev) => ({ ...prev, recommendations: recData.slice(0, 4), loading: false }));
-      }
-    } catch {}
-    try {
-      const newsRes = await window.fetch(`${BACKEND_API}/api/analysis/news-sentiment/${symbol}`);
-      if (newsRes.ok) {
-        const newsData = await newsRes.json();
-        if (mountedRef.current) setState((prev) => ({ ...prev, newsSentiment: newsData }));
-      }
-    } catch {}
-    try {
-      const socialRes = await window.fetch(`${BACKEND_API}/api/analysis/social-sentiment/${symbol}`);
-      if (socialRes.ok) {
-        const socialData = await socialRes.json();
-        if (mountedRef.current) setState((prev) => ({ ...prev, socialSentiment: socialData.data?.slice(-24) || [] }));
       }
     } catch {}
   }, [symbol]);
@@ -126,106 +98,6 @@ export function AnalystRecommendations({ symbol, name }: { symbol: string; name:
   );
 }
 
-export function NewsSentimentCard({ symbol }: { symbol: string }) {
-  const { newsSentiment, loading } = useSentimentData(symbol);
-  const bullish = newsSentiment?.sentiment?.bullishPercent ?? 0;
-  const bearish = newsSentiment?.sentiment?.bearishPercent ?? 0;
-  const buzz = newsSentiment?.buzz?.buzz ?? 0;
-  const articles = newsSentiment?.buzz?.articlesInLastWeek ?? 0;
-
-  return (
-    <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: "oklch(0.155 0.020 240)", border: "1px solid oklch(1 0 0 / 0.08)" }}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "oklch(0.820 0.160 90 / 0.12)", color: C_YELLOW }}>
-            <Activity className="w-3.5 h-3.5" />
-          </div>
-          <div>
-            <div className="text-xs font-semibold" style={{ color: C_FG }}>{symbol} News Sentiment</div>
-            <div className="text-[10px] font-mono" style={{ color: C_DIM }}>Media buzz & sentiment</div>
-          </div>
-        </div>
-        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "oklch(0.820 0.160 90 / 0.10)", color: C_YELLOW, border: "1px solid oklch(0.820 0.160 90 / 0.25)" }}>Finnhub</span>
-      </div>
-      {loading ? (
-        <Skeleton className="h-12 w-full rounded-lg" style={{ background: "oklch(1 0 0 / 0.06)" }} />
-      ) : newsSentiment ? (
-        <>
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <div className="text-[10px] mb-1" style={{ color: C_DIM }}>Bullish {bullish.toFixed(0)}%</div>
-              <div className="h-2 rounded-full overflow-hidden" style={{ background: "oklch(1 0 0 / 0.08)" }}>
-                <div style={{ width: `${bullish}%`, background: C_GREEN, height: "100%" }} />
-              </div>
-            </div>
-            <div className="flex-1">
-              <div className="text-[10px] mb-1" style={{ color: C_DIM }}>Bearish {bearish.toFixed(0)}%</div>
-              <div className="h-2 rounded-full overflow-hidden" style={{ background: "oklch(1 0 0 / 0.08)" }}>
-                <div style={{ width: `${bearish}%`, background: C_RED, height: "100%" }} />
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-3 text-[10px]">
-            <div><span style={{ color: C_DIM }}>Articles: </span><span className="font-mono font-semibold" style={{ color: C_FG }}>{articles}</span></div>
-            <div><span style={{ color: C_DIM }}>Buzz: </span><span className="font-mono font-semibold" style={{ color: buzz > 1 ? C_GREEN : buzz < 0.8 ? C_RED : C_FG }}>{buzz.toFixed(2)}x</span></div>
-          </div>
-          <div className="text-[11px] font-semibold px-2 py-1 rounded-lg w-fit" style={{ background: bullish > bearish + 10 ? `${C_GREEN} / 0.10` : bearish > bullish + 10 ? `${C_RED} / 0.10` : "oklch(0.550 0.015 240 / 0.10)", color: bullish > bearish + 10 ? C_GREEN : bearish > bullish + 10 ? C_RED : "oklch(0.600 0.015 240)" }}>
-            {bullish > bearish + 10 ? "Positive news sentiment" : bearish > bullish + 10 ? "Negative news sentiment" : "Neutral news sentiment"}
-          </div>
-        </>
-      ) : <div className="text-[11px]" style={{ color: C_DIM }}>No sentiment data</div>}
-    </div>
-  );
-}
-
-export function SocialSentimentCard({ symbol }: { symbol: string }) {
-  const { socialSentiment, loading } = useSentimentData(symbol);
-  const totalMentions = socialSentiment.reduce((sum, p) => sum + p.mention, 0);
-  const avgScore = socialSentiment.length > 0 ? socialSentiment.reduce((sum, p) => sum + p.score, 0) / socialSentiment.length : 0;
-  const positiveMentions = socialSentiment.reduce((sum, p) => sum + p.positiveMention, 0);
-  const negativeMentions = socialSentiment.reduce((sum, p) => sum + p.negativeMention, 0);
-
-  return (
-    <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: "oklch(0.155 0.020 240)", border: "1px solid oklch(1 0 0 / 0.08)" }}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "oklch(0.723 0.185 150 / 0.12)", color: C_GREEN }}>
-            <TrendingUp className="w-3.5 h-3.5" />
-          </div>
-          <div>
-            <div className="text-xs font-semibold" style={{ color: C_FG }}>{symbol} Social Sentiment</div>
-            <div className="text-[10px] font-mono" style={{ color: C_DIM }}>Reddit & Twitter</div>
-          </div>
-        </div>
-        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "oklch(0.723 0.185 150 / 0.10)", color: C_GREEN, border: "1px solid oklch(0.723 0.185 150 / 0.25)" }}>Finnhub</span>
-      </div>
-      {loading ? (
-        <Skeleton className="h-12 w-full rounded-lg" style={{ background: "oklch(1 0 0 / 0.06)" }} />
-      ) : socialSentiment.length > 0 ? (
-        <>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg p-2 text-center" style={{ background: "oklch(0.723 0.185 150 / 0.08)" }}>
-              <div className="text-[10px]" style={{ color: C_DIM }}>Mentions (24h)</div>
-              <div className="font-mono font-bold" style={{ color: C_GREEN }}>{totalMentions.toLocaleString()}</div>
-            </div>
-            <div className="rounded-lg p-2 text-center" style={{ background: avgScore > 0 ? "oklch(0.723 0.185 150 / 0.08)" : avgScore < 0 ? "oklch(0.637 0.220 25 / 0.08)" : "oklch(0.550 0.015 240 / 0.08)" }}>
-              <div className="text-[10px]" style={{ color: C_DIM }}>Avg Score</div>
-              <div className="font-mono font-bold" style={{ color: avgScore > 0 ? C_GREEN : avgScore < 0 ? C_RED : C_FG }}>{avgScore > 0 ? "+" : ""}{avgScore.toFixed(3)}</div>
-            </div>
-          </div>
-          <div className="flex justify-between text-[10px]"><span style={{ color: C_GREEN }}>+{positiveMentions}</span><span style={{ color: C_DIM }}>split</span><span style={{ color: C_RED }}>-{negativeMentions}</span></div>
-          <div className="flex h-2 rounded-full overflow-hidden">
-            <div style={{ width: `${(positiveMentions / (positiveMentions + negativeMentions || 1)) * 100}%`, background: C_GREEN }} />
-            <div style={{ width: `${(negativeMentions / (positiveMentions + negativeMentions || 1)) * 100}%`, background: C_RED }} />
-          </div>
-          <div className="text-[11px] font-semibold px-2 py-1 rounded-lg w-fit" style={{ background: positiveMentions > negativeMentions * 1.5 ? `${C_GREEN} / 0.10` : negativeMentions > positiveMentions * 1.5 ? `${C_RED} / 0.10` : "oklch(0.550 0.015 240 / 0.10)", color: positiveMentions > negativeMentions * 1.5 ? C_GREEN : negativeMentions > positiveMentions * 1.5 ? C_RED : "oklch(0.600 0.015 240)" }}>
-            {positiveMentions > negativeMentions * 1.5 ? "Bullish social sentiment" : negativeMentions > positiveMentions * 1.5 ? "Bearish social sentiment" : "Mixed social sentiment"}
-          </div>
-        </>
-      ) : <div className="text-[11px]" style={{ color: C_DIM }}>No social data</div>}
-    </div>
-  );
-}
 
 export function FinnhubSentimentSection() {
   return (

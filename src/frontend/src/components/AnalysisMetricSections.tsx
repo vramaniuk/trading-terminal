@@ -278,38 +278,145 @@ function useDerivativesData(): DerivativesData {
   });
 
   useEffect(() => {
-    // Simulate loading - in real app this would fetch from API
-    const timer = setTimeout(() => {
-      setData({
-        longShortRatio: 1.15,
-        longPct: 53.5,
-        shortPct: 46.5,
-        takerBuySellRatio: 1.02,
-        putCallRatio: 0.75,
-        btcData: {
-          name: "Bitcoin",
-          symbol: "BTC",
-          price: 67500,
-          change1h: 0.12,
-          change24h: 2.35,
-          change7d: -1.2,
-          marketCap: 1_350_000_000_000,
-          volume24h: 45_000_000_000,
-        },
-        ethData: {
-          name: "Ethereum",
-          symbol: "ETH",
-          price: 3550,
-          change1h: -0.08,
-          change24h: 1.85,
-          change7d: 3.2,
-          marketCap: 420_000_000_000,
-          volume24h: 18_000_000_000,
-        },
-        loading: false,
-      });
-    }, 1000);
-    return () => clearTimeout(timer);
+    const fetchData = async () => {
+      try {
+        // Fetch prices from dzengi.com public API
+        const dzengiRes = await fetch("https://api-adapter.dzengi.com/api/v1/ticker/24hr");
+        let btcPrice: number | null = null;
+        let ethPrice: number | null = null;
+        let btcChange24h: number | null = null;
+        let ethChange24h: number | null = null;
+
+        if (dzengiRes.ok) {
+          const tickers = await dzengiRes.json() as Array<{
+            symbol: string;
+            lastPrice?: string;
+            priceChangePercent?: string;
+          }>;
+
+          // Find BTC/USD_LEVERAGE for BTC price
+          const btcTicker = tickers.find(t => t.symbol === "BTC/USD_LEVERAGE");
+          if (btcTicker) {
+            btcPrice = Number.parseFloat(btcTicker.lastPrice ?? "0");
+            btcChange24h = Number.parseFloat(btcTicker.priceChangePercent ?? "0");
+          }
+
+          // Find ETH/USD_LEVERAGE for ETH price
+          const ethTicker = tickers.find(t => t.symbol === "ETH/USD_LEVERAGE");
+          if (ethTicker) {
+            ethPrice = Number.parseFloat(ethTicker.lastPrice ?? "0");
+            ethChange24h = Number.parseFloat(ethTicker.priceChangePercent ?? "0");
+          }
+        }
+
+        // Fetch market cap and volume from backend (CoinGecko)
+        const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+        let btcCap: number | null = null;
+        let ethCap: number | null = null;
+        let btcVol: number | null = null;
+        let ethVol: number | null = null;
+
+        try {
+          const [btcCoinRes, ethCoinRes] = await Promise.all([
+            fetch(`${BACKEND_API}/api/analysis/coingecko-coin/bitcoin`),
+            fetch(`${BACKEND_API}/api/analysis/coingecko-coin/ethereum`),
+          ]);
+
+          if (btcCoinRes.ok) {
+            const btcData = await btcCoinRes.json() as {
+              market_data?: {
+                market_cap?: { usd?: number };
+                total_volume?: { usd?: number };
+              };
+            };
+            btcCap = btcData.market_data?.market_cap?.usd ?? null;
+            btcVol = btcData.market_data?.total_volume?.usd ?? null;
+          }
+
+          if (ethCoinRes.ok) {
+            const ethData = await ethCoinRes.json() as {
+              market_data?: {
+                market_cap?: { usd?: number };
+                total_volume?: { usd?: number };
+              };
+            };
+            ethCap = ethData.market_data?.market_cap?.usd ?? null;
+            ethVol = ethData.market_data?.total_volume?.usd ?? null;
+          }
+        } catch {
+          // Fallback values if CoinGecko fetch fails
+          btcCap = btcCap ?? 1_350_000_000_000;
+          ethCap = ethCap ?? 420_000_000_000;
+          btcVol = btcVol ?? 45_000_000_000;
+          ethVol = ethVol ?? 18_000_000_000;
+        }
+
+        // Static derivatives metrics (to be replaced with real data in future)
+        setData({
+          longShortRatio: 1.15,
+          longPct: 53.5,
+          shortPct: 46.5,
+          takerBuySellRatio: 1.02,
+          putCallRatio: 0.75,
+          btcData: {
+            name: "Bitcoin",
+            symbol: "BTC",
+            price: btcPrice,
+            change1h: null, // Not available from dzengi 24hr endpoint
+            change24h: btcChange24h,
+            change7d: null, // Not available from dzengi 24hr endpoint
+            marketCap: btcCap,
+            volume24h: btcVol,
+          },
+          ethData: {
+            name: "Ethereum",
+            symbol: "ETH",
+            price: ethPrice,
+            change1h: null, // Not available from dzengi 24hr endpoint
+            change24h: ethChange24h,
+            change7d: null, // Not available from dzengi 24hr endpoint
+            marketCap: ethCap,
+            volume24h: ethVol,
+          },
+          loading: false,
+        });
+      } catch {
+        // Set error state with fallback data
+        setData({
+          longShortRatio: null,
+          longPct: null,
+          shortPct: null,
+          takerBuySellRatio: null,
+          putCallRatio: null,
+          btcData: {
+            name: "Bitcoin",
+            symbol: "BTC",
+            price: null,
+            change1h: null,
+            change24h: null,
+            change7d: null,
+            marketCap: null,
+            volume24h: null,
+          },
+          ethData: {
+            name: "Ethereum",
+            symbol: "ETH",
+            price: null,
+            change1h: null,
+            change24h: null,
+            change7d: null,
+            marketCap: null,
+            volume24h: null,
+          },
+          loading: false,
+        });
+      }
+    };
+
+    fetchData();
+    // Refresh every 30 seconds
+    const timer = setInterval(fetchData, 30_000);
+    return () => clearInterval(timer);
   }, []);
 
   return data;
@@ -524,16 +631,10 @@ export function DerivativesSection() {
                 : "Unavailable"}
             </div>
           )}
-          {!d.loading && (
+          {!d.loading && d.btcData.change24h != null && (
             <div className="flex gap-2 text-[10px] font-mono">
-              <span style={{ color: (d.btcData.change1h ?? 0) >= 0 ? C_GREEN : C_RED }}>
-                1h: {(d.btcData.change1h ?? 0).toFixed(2)}%
-              </span>
-              <span style={{ color: (d.btcData.change24h ?? 0) >= 0 ? C_GREEN : C_RED }}>
-                24h: {(d.btcData.change24h ?? 0).toFixed(2)}%
-              </span>
-              <span style={{ color: (d.btcData.change7d ?? 0) >= 0 ? C_GREEN : C_RED }}>
-                7d: {(d.btcData.change7d ?? 0).toFixed(2)}%
+              <span style={{ color: d.btcData.change24h >= 0 ? C_GREEN : C_RED }}>
+                24h: {d.btcData.change24h >= 0 ? "+" : ""}{d.btcData.change24h.toFixed(2)}%
               </span>
             </div>
           )}
@@ -588,16 +689,10 @@ export function DerivativesSection() {
                 : "Unavailable"}
             </div>
           )}
-          {!d.loading && (
+          {!d.loading && d.ethData.change24h != null && (
             <div className="flex gap-2 text-[10px] font-mono">
-              <span style={{ color: (d.ethData.change1h ?? 0) >= 0 ? C_GREEN : C_RED }}>
-                1h: {(d.ethData.change1h ?? 0).toFixed(2)}%
-              </span>
-              <span style={{ color: (d.ethData.change24h ?? 0) >= 0 ? C_GREEN : C_RED }}>
-                24h: {(d.ethData.change24h ?? 0).toFixed(2)}%
-              </span>
-              <span style={{ color: (d.ethData.change7d ?? 0) >= 0 ? C_GREEN : C_RED }}>
-                7d: {(d.ethData.change7d ?? 0).toFixed(2)}%
+              <span style={{ color: d.ethData.change24h >= 0 ? C_GREEN : C_RED }}>
+                24h: {d.ethData.change24h >= 0 ? "+" : ""}{d.ethData.change24h.toFixed(2)}%
               </span>
             </div>
           )}
@@ -652,30 +747,6 @@ interface RecommendationPeriod {
   strongSell: number;
 }
 
-interface NewsSentimentData {
-  buzz: {
-    articlesInLastWeek: number;
-    buzz: number;
-    weeklyAverage: number;
-  };
-  sectorAverageBullishPercent: number;
-  sectorAverageNewsScore: number;
-  sentiment: {
-    bearishPercent: number;
-    bullishPercent: number;
-  };
-  symbol: string;
-}
-
-interface SocialSentimentPoint {
-  atTime: string;
-  mention: number;
-  positiveScore: number;
-  negativeScore: number;
-  positiveMention: number;
-  negativeMention: number;
-  score: number;
-}
 
 const CRYPTO_PROXIES = [
   { symbol: "MSTR", name: "MicroStrategy", type: "BTC" },
@@ -688,8 +759,6 @@ const CRYPTO_PROXIES = [
 function useSentimentData(symbol: string) {
   const [state, setState] = useState({
     recommendations: [] as RecommendationPeriod[],
-    newsSentiment: null as NewsSentimentData | null,
-    socialSentiment: [] as SocialSentimentPoint[],
     loading: true,
   });
   const mountedRef = useRef(true);
@@ -704,22 +773,6 @@ function useSentimentData(symbol: string) {
         if (mountedRef.current) {
           setState((prev) => ({ ...prev, recommendations: recData.slice(0, 4), loading: false }));
         }
-      }
-    } catch { /* ignore */ }
-
-    try {
-      const newsRes = await window.fetch(`${BACKEND_API}/api/analysis/news-sentiment/${symbol}`);
-      if (newsRes.ok) {
-        const newsData = await newsRes.json();
-        if (mountedRef.current) setState((prev) => ({ ...prev, newsSentiment: newsData }));
-      }
-    } catch { /* ignore */ }
-
-    try {
-      const socialRes = await window.fetch(`${BACKEND_API}/api/analysis/social-sentiment/${symbol}`);
-      if (socialRes.ok) {
-        const socialData = await socialRes.json();
-        if (mountedRef.current) setState((prev) => ({ ...prev, socialSentiment: socialData.data?.slice(-24) || [] }));
       }
     } catch { /* ignore */ }
   }, [symbol]);
@@ -739,7 +792,7 @@ export function SentimentSection() {
     <section data-ocid="analysis.section.sentiment" className="mb-8">
       <MetricSectionHeader
         title="Market Sentiment"
-        subtitle="Analyst recommendations & news sentiment from Finnhub"
+        subtitle="Analyst recommendations from Finnhub"
         badge="Finnhub"
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
@@ -752,7 +805,7 @@ export function SentimentSection() {
 }
 
 function SentimentCard({ proxy }: { proxy: typeof CRYPTO_PROXIES[0] }) {
-  const { recommendations, newsSentiment, loading } = useSentimentData(proxy.symbol);
+  const { recommendations, loading } = useSentimentData(proxy.symbol);
 
   // Calculate consensus from recommendations
   const latestRec = recommendations[0];
@@ -764,10 +817,7 @@ function SentimentCard({ proxy }: { proxy: typeof CRYPTO_PROXIES[0] }) {
   const bullishPct = total > 0 ? (bullishCount / total) * 100 : null;
   const bearishPct = total > 0 ? (bearishCount / total) * 100 : null;
 
-  // News sentiment
-  const newsBullish = newsSentiment?.sentiment?.bullishPercent ?? null;
-  const newsBearish = newsSentiment?.sentiment?.bearishPercent ?? null;
-
+  
   // Determine overall signal
   const signal: MetricCardProps["signal"] =
     bullishPct != null && bullishPct > 60
