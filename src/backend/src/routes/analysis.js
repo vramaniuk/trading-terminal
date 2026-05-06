@@ -431,6 +431,9 @@ router.get('/macro/:symbol', async (req, res) => {
     const { symbol } = req.params;
     const response = await axios.get('https://api-adapter.dzengi.com/api/v1/ticker/24hr');
     const item = response.data.find(t => t.symbol === symbol);
+    if (!item) {
+      return res.status(404).json({ error: `Symbol ${symbol} not found` });
+    }
     const price = Number(item.lastPrice);
     res.json({
       price,
@@ -859,7 +862,7 @@ router.get('/etf-daily-flows/:asset', async (req, res) => {
     let sourceDetail = '';
 
     if (asset === 'btc') {
-      const cacheKey = `etf-daily-flows-btc-${days}-bitbo-v1`;
+      const cacheKey = `etf-daily-flows-btc-${days}-bitbo-v2`;
       const cached = getCached(cacheKey);
       if (cached) {
         return res.json(cached);
@@ -884,6 +887,16 @@ router.get('/etf-daily-flows/:asset', async (req, res) => {
         sourceDetail = 'Failed to fetch bitbo.io treasuries/etf-flows/.';
       }
 
+      // Filter out invalid dates: future dates and weekends (ETFs don't trade Sat/Sun)
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      data = data.filter((row) => {
+        const rowDate = new Date(row.date);
+        const dayOfWeek = rowDate.getUTCDay(); // 0 = Sunday, 6 = Saturday
+        // Exclude weekends and future dates
+        return row.date <= todayStr && dayOfWeek !== 0 && dayOfWeek !== 6;
+      });
+
       const cutoffMs = Date.now() - days * 86400000;
       let trimmed = data.filter((row) => {
         const t = new Date(`${row.date}T12:00:00Z`).getTime();
@@ -900,7 +913,7 @@ router.get('/etf-daily-flows/:asset', async (req, res) => {
         unit: 'USD',
         source,
         sourceDetail,
-        description: 'US spot Bitcoin ETF daily net flow (inflows minus outflows).',
+        description: 'US spot Bitcoin ETF daily net flow (Bitbo). Note: Data may lag 12-24h behind real-time sources like Farside Investors.',
         days,
         data: trimmed,
       };

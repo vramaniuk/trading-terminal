@@ -33,7 +33,7 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? process.env.FRONTEND_URL 
-    : 'http://localhost:5173',
+    : true, // Allow any origin in development
   credentials: true
 }));
 app.use(express.json());
