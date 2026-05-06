@@ -1030,28 +1030,6 @@ function SentimentCard({ proxy }: { proxy: typeof CRYPTO_PROXIES[0] }) {
         </>
       )}
 
-      {/* News Sentiment */}
-      {!loading && newsSentiment && (
-        <div className="pt-2 border-t border-white/10">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px]" style={{ color: C_DIM }}>
-              News Sentiment
-            </span>
-            {newsSentiment.buzz?.buzz != null && (
-              <span className="text-[9px] font-mono" style={{ color: C_MID }}>
-                Buzz: {newsSentiment.buzz.buzz.toFixed(2)}x
-              </span>
-            )}
-          </div>
-          {newsSentiment?.bullish != null && newsSentiment?.bearish != null && (
-            <div className="flex gap-2 text-[10px] font-mono">
-              <span style={{ color: C_GREEN }}>🟢 {newsSentiment.bullish.toFixed(0)}%</span>
-              <span style={{ color: C_RED }}>🔴 {newsSentiment.bearish.toFixed(0)}%</span>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Signal text */}
       {!loading && (
         <div
