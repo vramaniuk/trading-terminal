@@ -565,30 +565,18 @@ function FundingCard({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          {!loading && !error && (
-            <span
-              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-              style={{
-                background: sc.bg,
-                color: sc.color,
-                border: `1px solid ${sc.border}`,
-              }}
-            >
-              {sc.label}
-            </span>
-          )}
+        {!loading && !error && (
           <span
-            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+            className="text-[10px] font-bold px-2 py-0.5 rounded-full"
             style={{
-              background: "oklch(0.785 0.135 200 / 0.10)",
-              color: "oklch(0.785 0.135 200)",
-              border: "1px solid oklch(0.785 0.135 200 / 0.25)",
+              background: sc.bg,
+              color: sc.color,
+              border: `1px solid ${sc.border}`,
             }}
           >
-            Binance
+            {sc.label}
           </span>
-        </div>
+        )}
       </div>
       {loading ? (
         <Skeleton
@@ -1762,7 +1750,7 @@ export function AnalysisPanel() {
         <section data-ocid="analysis.section.funding">
           <SectionHeader
             title="Crypto Derivatives — Funding Rates"
-            badge="Binance"
+            badge={data.btcFunding.source || "Binance"}
           />
           <div className="flex flex-col sm:flex-row gap-4">
             <FundingCard

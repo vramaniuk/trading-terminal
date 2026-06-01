@@ -242,6 +242,8 @@ interface DerivativesData {
   shortPct: number | null;
   takerBuySellRatio: number | null;
   putCallRatio: number | null;
+  lsSource: string;
+  takerSource: string;
   btcData: CoinVolumeData;
   ethData: CoinVolumeData;
   loading: boolean;
@@ -254,6 +256,8 @@ function useDerivativesData(): DerivativesData {
     shortPct: null,
     takerBuySellRatio: null,
     putCallRatio: null,
+    lsSource: "Binance",
+    takerSource: "Binance",
     btcData: {
       name: "Bitcoin",
       symbol: "BTC",
@@ -353,6 +357,8 @@ function useDerivativesData(): DerivativesData {
         let shortPct: number | null = null;
         let takerBuySellRatio: number | null = null;
         let putCallRatio: number | null = null;
+        let lsSource = "Binance";
+        let takerSource = "Binance";
 
         try {
           const [lsRes, takerRes, pcRes] = await Promise.all([
@@ -367,10 +373,12 @@ function useDerivativesData(): DerivativesData {
               longAccount: number;
               shortAccount: number;
               timestamp: string;
+              source?: string;
             };
             longShortRatio = lsData.longShortRatio;
             longPct = lsData.longAccount * 100;
             shortPct = lsData.shortAccount * 100;
+            lsSource = lsData.source || "Binance";
           }
 
           if (takerRes.ok) {
@@ -379,8 +387,10 @@ function useDerivativesData(): DerivativesData {
               buyVol: number;
               sellVol: number;
               timestamp: string;
+              source?: string;
             };
             takerBuySellRatio = takerData.buySellRatio;
+            takerSource = takerData.source || "Binance";
           }
 
           if (pcRes.ok) {
@@ -402,6 +412,8 @@ function useDerivativesData(): DerivativesData {
           shortPct,
           takerBuySellRatio,
           putCallRatio,
+          lsSource,
+          takerSource,
           btcData: {
             name: "Bitcoin",
             symbol: "BTC",
@@ -432,6 +444,8 @@ function useDerivativesData(): DerivativesData {
           shortPct: null,
           takerBuySellRatio: null,
           putCallRatio: null,
+          lsSource: "Binance",
+          takerSource: "Binance",
           btcData: {
             name: "Bitcoin",
             symbol: "BTC",
@@ -511,7 +525,7 @@ export function DerivativesSection() {
       <MetricSectionHeader
         title="Derivatives & Market Structure"
         subtitle="Futures positioning, options sentiment, and spot volume"
-        badge="Binance / Amberdata / CoinGecko"
+        badge={`${d.lsSource} / Amberdata / CoinGecko`}
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
         {/* Long/Short Ratio */}
@@ -547,7 +561,7 @@ export function DerivativesSection() {
                 border: "1px solid oklch(0.785 0.135 200 / 0.25)",
               }}
             >
-              Binance
+              {d.lsSource}
             </span>
           </div>
           {d.loading ? (
@@ -626,7 +640,7 @@ export function DerivativesSection() {
           }
           signal={ts.signal}
           signalText={ts.text}
-          badge="Binance"
+          badge={d.takerSource}
         />
 
         {/* Put/Call Ratio */}

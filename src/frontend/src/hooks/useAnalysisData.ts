@@ -13,6 +13,7 @@ export interface FundingState {
   rate: number;
   nextSettlement: number; // unix ms
   intervalHours: number;
+  source?: string;
   loading: boolean;
   error: boolean;
 }
@@ -110,17 +111,18 @@ export async function fetchFearGreed(): Promise<FearGreedState> {
   };
 }
 
-// ---- Binance Funding Rate ----
+// ---- Funding Rate ----
 export async function fetchBinanceFunding(
   symbol: string,
 ): Promise<FundingState> {
   const res = await fetch(`${BACKEND_API}/api/analysis/funding/${symbol}`);
-  if (!res.ok) throw new Error("binance funding");
+  if (!res.ok) throw new Error("funding");
   const data = await res.json();
   return {
     rate: data.rate,
     nextSettlement: data.nextSettlement,
     intervalHours: data.intervalHours,
+    source: data.source,
     loading: false,
     error: false,
   };
