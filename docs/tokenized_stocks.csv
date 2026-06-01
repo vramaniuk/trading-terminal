@@ -1,0 +1,214 @@
+ticker,name,type
+BA,Boeing Co,Aerospace
+SPCE,Virgin Galactic Holdings Inc,Aerospace
+SPR,"Spirit AeroSystems Holdings, Inc.",Aerospace
+AAL,American Airlines Group Inc,Airlines
+AFp,Air France-Klm,Airlines
+DAL,Delta Air Lines Inc,Airlines
+ICAG,International Consolidated Airlines Group SA - EUR,Airlines
+LHA,Deutsche Lufthansa AG,Airlines
+F,Ford Motor Co,Automotive
+GM,General Motors Co,Automotive
+GT,The Goodyear Tire & Rubber Company,Automotive
+HYLN,Hyliion Holdings Corp.,Automotive
+LCID,"Lucid Group, Inc.",Automotive
+LIus,Li Auto Inc,Automotive
+MVST,"Microvast Holdings, Inc.",Automotive
+NIO,NIO Inc - ADR,Automotive
+QS,QuantumScape Corporation,Automotive
+RIVN,"Rivian Automotive, Inc.",Automotive
+TSLA,Tesla Inc,Automotive
+VOW3,Volkswagen AG (Pfd),Automotive
+WKHS,Workhorse Group Inc.,Automotive
+XPEV,XPeng Inc - ADR,Automotive
+CRON,Cronos Group Inc.,Cannabis
+TLRY,Tilray Inc,Cannabis
+PINS,Pinterest Inc,Communication
+ADS.DE,Adidas AG,Consumer
+APRN,"Blue Apron Holdings, Inc. Class",Consumer
+ATER,"Aterian, Inc.",Consumer
+BIG,Big Lots,Consumer
+BRCC,BRC Inc.,Consumer
+BYND,Beyond Meat Inc,Consumer
+GAP,"The Gap, Inc.",Consumer
+KO,Coca-Cola Co,Consumer
+M,Macys,Consumer
+PTON,Peloton Interactive Inc,Consumer
+SBUX,Starbucks Corp,Consumer
+WMT,Wal-Mart Stores Inc,Consumer
+WW,"Weight Watchers International, Inc.",Consumer
+AMZN,Amazon.com Inc,E-commerce
+BABA,Alibaba Group Holding Limited,E-commerce
+BZUN,Baozun Inc.,E-commerce
+CPNG,"Coupang, Inc.",E-commerce
+EBAY,eBay,E-commerce
+JD,JD.com Inc,E-commerce
+JMIA,Jumia Technologies AG,E-commerce
+LOGCus,ContextLogic Inc,E-commerce
+VIPS,Vipshop Holdgs Spon Ads Rep 0.20,E-commerce
+ARKK,ARK Innovation ETF,ETF
+BITO,ProShares Bitcoin Strategy ETF,ETF
+DRIV,Global X Autonomous & Electric Vehicles ETF,ETF
+ICLN,iShares Global Clean Energy ETF,ETF
+LIT,Global X Lithium & Battery Tech ETF,ETF
+MCHI,iShares MSCI China ETF,ETF
+MJ,ETFMG Alternative Harvest ETF,ETF
+PBD,Invesco Global Clean Energy ETF,ETF
+SPXU,ProShares UltraPro Short S&P500,ETF
+SPY,SPDR S&P 500 ETF,ETF
+TAN,Invesco Solar ETF,ETF
+TLT,iShares 20+ Year Treasury Bond ETF,ETF
+TQQQ,ProShares UltraPro QQQ,ETF
+UVXY,ProShares Ultra VIX Short-Term Futures ETF,ETF
+VOO,Vanguard S&P 500 ETF,ETF
+YOLO,AdvisorShares Pure Cannabis ETF,ETF
+COUR,"Coursera, Inc.",Education
+EDU,New Orientl Eductn Grp Adr Rep 1,Education
+TAL,Tal Education Grp Adr Rep 2 Cl A,Education
+UDMY,"Udemy, Inc.",Education
+A2A,A2A SPA,Energy
+BLDP,Ballard Power Systems Inc.,Energy
+DVN,Devon Energy,Energy
+ENPH,"Enphase Energy, Inc.",Energy
+ET,Energy Transfer LP,Energy
+FCEL,"FuelCell Energy, Inc.",Energy
+OXY,Occidental Petroleum Corp,Energy
+PLUG,Plug Power Inc,Energy
+RIG,Transocean Ltd.,Energy
+SWN,Southwestern Energy,Energy
+UN0,Uniper SE,Energy
+XOM,Exxon Mobil Corp,Energy
+AMC,AMC Entertainment Holdings Inc,Entertainment
+BILI,Bilibili Inc.,Entertainment
+CNK,"Cinemark Holdings, Inc.",Entertainment
+DIS,Walt Disney Co,Entertainment
+DKNG,DraftKings Inc.,Entertainment
+FUBO,fuboTV Inc.,Entertainment
+GME,GameStop Corp,Entertainment
+GPRO,GoPro Inc,Entertainment
+IQ,"iQIYI, Inc.",Entertainment
+JUVE,Juventus FC,Entertainment
+MOMO,Momo Inc.,Entertainment
+NFLX,Netflix Inc,Entertainment
+PLTK,Playtika Holding Corp.,Entertainment
+RBLX,Roblox Corp,Entertainment
+SKLZ,Skillz Inc.,Entertainment
+SNE,Sony Corporation,Entertainment
+SPOT,Spotify Technology SA,Entertainment
+AFRM,Affirm Holdings Inc,Finance
+BAC,Bank of America Corp,Finance
+BGN,Banca Generali SPA,Finance
+BKKT,"Bakkt Holdings, Inc.",Finance
+BTBT,"Bit Digital, Inc.",Finance
+COIN,Coinbase Global Inc,Finance
+DBK,Deutsche Bank AG,Finance
+HOOD,Robinhood Markets Inc,Finance
+ITUB,Itau Unibanco Holding SA,Finance
+JPM,JPMorgan Chase & Co,Finance
+LX,LexinFintech Holdings Ltd.,Finance
+MARA,"Marathon Digital Holdings, Inc",Finance
+MQ,"Marqeta, Inc.",Finance
+NCTY,The9 Limited,Finance
+PSFE,Paysafe Limited,Finance
+RBSl,NatWest Group PLC,Finance
+SOFI,"SoFi Technologies, Inc.",Finance
+V,Visa Inc,Finance
+WFC,Wells Fargo & Co,Finance
+YRD,Yirendai Ltd.,Finance
+GOCO,"GoHealth, Inc.",Healthcare
+ORP,Orpea,Healthcare
+NOEJ,Norma Group SE,Industrial
+OHL,"Obrascón Huarte Lain, S.A.",Industrial
+AA,Alcoa,Materials
+AG,First Majestic Silver Corp.,Materials
+CLF,Cleveland-Cliffs Inc,Materials
+MOS,Mosaic,Materials
+NEM,Newmont Goldcorp Corporation,Materials
+PNR,Pentair,Materials
+VALE,Vale Adr Reptg One,Materials
+ABCL,AbCellera Biologics Inc.,Pharma
+BIIB,Biogen Inc.,Pharma
+BLUE,"bluebird bio, Inc.",Pharma
+BNGO,"Bionano Genomics, Inc.",Pharma
+BNTX,BioNtech SE,Pharma
+CGEN,Compugen Ltd. - Ordinary Shares,Pharma
+CLOV,Clover Health Investments,Pharma
+CRIS,"Curis, Inc.",Pharma
+EW,Edwards Lifesciences,Pharma
+EXAS,Exact Sciences Corporation,Pharma
+INO,"Inovio Pharmaceuticals, Inc.",Pharma
+JNJ,Johnson & Johnson,Pharma
+LGVN,Longeveron Inc.,Pharma
+MRNA,Moderna Inc,Pharma
+NKTR,Nektar Therapeutics,Pharma
+NVAX,Novavax Inc,Pharma
+PBYI,"Puma Biotechnology, Inc.",Pharma
+PFE,Pfizer Inc,Pharma
+PHAR,Pharming Group N.V.,Pharma
+QDEL,Quidel Corporation,Pharma
+SNY,Sanofi Adr Rep 1 1/2,Pharma
+TEVA,Teva Pharma Ind Adr Rep 1,Pharma
+VIR,"Vir Biotechnology, Inc.",Pharma
+VLA,Valneva SE,Pharma
+ZLAB,Zai Lab Limited,Pharma
+ZNTL,Zentalis Pharmaceuticals,Pharma
+AIV,Apartment Investment & Management Co,Real Estate
+Z,"Zillow Group, Inc.",Real Estate
+AAPL,Apple Inc,Technology
+ADBE,Adobe Systems Inc,Technology
+AMD,Advanced Micro Devices Inc,Technology
+ARQQ,Arqit Quantum Inc.,Technology
+BB,BlackBerry Limited,Technology
+BIDU,Baidu Inc,Technology
+BILL,Bill.com Inc,Technology
+CRM,Salesforce Inc,Technology
+CRWD,"CrowdStrike Holdings, Inc.",Technology
+CSCO,Cisco Systems,Technology
+DASH,DoorDash Inc,Technology
+DBX,Dropbox,Technology
+DDOG,Datadog Inc,Technology
+DJT,Trump Media & Technology Group,Technology
+DOCU,DocuSign Inc,Technology
+EPAM,"EPAM Systems, Inc.",Technology
+FROG,JFrog Ltd.,Technology
+FSLY,"Fastly, Inc.",Technology
+FVRR,Fiverr International Ltd.,Technology
+GOOGL,Alphabet Inc - A,Technology
+GTLB,GitLab Inc. Class A Common Stock,Technology
+HPE,Hewlett Packard Enterprise,Technology
+HPQ,HP,Technology
+IBM,IBM Corp,Technology
+INTC,Intel Corp,Technology
+KOPN,Kopin Corporation,Technology
+MDB,"MongoDB, Inc.",Technology
+META,Meta Platforms Inc,Technology
+MSFT,Microsoft Corp,Technology
+MTTR,"Matterport, Inc.",Technology
+MU,Micron Technology Inc,Technology
+NET,Cloudflare Inc.,Technology
+NOK,Nokia Adr Repsg 1 Ser A,Technology
+NTNX,"Nutanix, Inc.",Technology
+NVDA,NVIDIA Corp,Technology
+OCFT,OneConnect,Technology
+PLTR,Palantir Technologies Inc,Technology
+PYPL,PayPal Holdings Inc,Technology
+QCOM,QUALCOMM Inc,Technology
+SHOP,Shopify Inc (US),Technology
+SNAP,Snap Inc,Technology
+SNOW,Snowflake Inc,Technology
+SQ,Block Inc,Technology
+STX,Seagate Technology,Technology
+TSM,Taiwan Semiconductor Manufacturing Co Ltd - ADR,Technology
+U,Unity Software Inc,Technology
+UBER,Uber Technologies Inc,Technology
+UPST,"Upstart Holdings, Inc.",Technology
+VNET,"21Vianet Group, Inc.",Technology
+WATT,Energous Corporation,Technology
+YMM,Full Truck Alliance Co. Ltd.,Technology
+LUMN,"Lumen Technologies, Inc",Telecom
+T,AT&T Inc,Telecom
+TIT,Telecom Italia SPA,Telecom
+ABNB,Airbnb Inc,Travel
+CCL,Carnival Corp,Travel
+NCLH,Norwegian Cruise Line Holdings Ltd,Travel
+TUI1,TUI AG - EUR,Travel
