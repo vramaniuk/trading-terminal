@@ -24,7 +24,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const DZENGI_API = "https://api-adapter.dzengi.com/api/v1";
-const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+const BACKEND_API = import.meta.env.BACKEND_API || "";
 const POLL_INTERVAL_MS = 10_000;
 const COINGECKO_POLL_MS = 60_000;
 

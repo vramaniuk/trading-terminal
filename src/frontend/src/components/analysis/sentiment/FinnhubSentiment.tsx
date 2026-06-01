@@ -30,7 +30,7 @@ function useSentimentData(symbol: string) {
   const mountedRef = useRef(true);
 
   const fetchData = useCallback(async () => {
-    const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+    const BACKEND_API = import.meta.env.BACKEND_API || "";
     try {
       const recRes = await window.fetch(`${BACKEND_API}/api/analysis/recommendations/${symbol}`);
       if (recRes.ok) {

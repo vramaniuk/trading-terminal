@@ -315,7 +315,7 @@ export function ExchangeBalanceTable() {
     setLoading(true);
     setError(false);
     try {
-      const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+      const BACKEND_API = import.meta.env.BACKEND_API || "";
       const results: TableRowData[] = [];
 
       for (const exchange of exchanges) {

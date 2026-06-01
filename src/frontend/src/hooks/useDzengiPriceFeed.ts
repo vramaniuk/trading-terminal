@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+const BACKEND_API = import.meta.env.BACKEND_API || "";
 const REST_POLL_INTERVAL_MS = 5_000;
 
 const SYMBOLS = [

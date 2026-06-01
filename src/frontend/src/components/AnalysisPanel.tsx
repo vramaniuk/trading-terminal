@@ -987,7 +987,7 @@ function useMarketCapMetrics(): MarketCapMetrics {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchMarketCaps = useCallback(async () => {
-    const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+    const BACKEND_API = import.meta.env.BACKEND_API || "";
     try {
       const globalRes = await fetch(`${BACKEND_API}/api/analysis/coingecko-global`);
       if (!globalRes.ok) throw new Error("coingecko global");
@@ -1377,7 +1377,7 @@ function useGlobalSpotVolume(): GlobalSpotVolumeState {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchVolumes = useCallback(async () => {
-    const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+    const BACKEND_API = import.meta.env.BACKEND_API || "";
     async function fetchCoin(id: string): Promise<number> {
       try {
         const res = await fetch(`${BACKEND_API}/api/analysis/coingecko-coin/${id}`);
@@ -1441,7 +1441,7 @@ function useGlobalOI(): GlobalOIState {
 
   const fetchOI = useCallback(async () => {
     try {
-      const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+      const BACKEND_API = import.meta.env.BACKEND_API || "";
       
       // Fetch BTC and ETH OI from backend (aggregated from Binance + Bybit + OKX)
       const [btcRes, ethRes] = await Promise.allSettled([

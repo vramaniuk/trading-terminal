@@ -27,7 +27,7 @@ interface BlockchainStatsResponse {
 
 async function fetchBlockchainStats(): Promise<Partial<OnChainData>> {
   const results: Partial<OnChainData> = {};
-  const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+  const BACKEND_API = import.meta.env.BACKEND_API || "";
 
   try {
     const res = await window.fetch(`${BACKEND_API}/api/analysis/blockchain-stats`);

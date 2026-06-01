@@ -3,10 +3,17 @@ import axios from 'axios';
 
 const router = express.Router();
 
-const CORSPROXY = 'https://corsproxy.io/?url=';
 const BINANCE_FAPI = 'https://fapi.binance.com';
+const BINANCE_FAPI_ALT = 'https://fapi1.binance.com';
 const BYBIT_API = 'https://api.bybit.com';
 const OKX_API = 'https://www.okx.com';
+
+// Multiple proxy services for fallback when direct Binance access is blocked (cloud IPs)
+const PROXY_SERVICES = [
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
 // Lazy getters for env vars - ensures they are read AFTER dotenv.config() runs
 const getCOINGECKO_API_KEY = () => process.env.COINGECKO_API_KEY;
 const getFINNHUB_API_KEY = () => process.env.FINNHUB_API_KEY;
@@ -281,8 +288,31 @@ async function fetchFinnhubRecommendations(symbol) {
 }
 
 
-function proxiedGet(url) {
-  return `${CORSPROXY}${encodeURIComponent(url)}`;
+async function fetchWithFallbacks(url, options = {}) {
+  const timeout = options.timeout || 10000;
+  // Try direct first
+  try {
+    const res = await axios.get(url, { timeout, ...options });
+    return res;
+  } catch (directErr) {
+    // Try alternate Binance domain if it's a Binance URL
+    if (url.includes('fapi.binance.com')) {
+      try {
+        const altUrl = url.replace('fapi.binance.com', 'fapi1.binance.com');
+        const res = await axios.get(altUrl, { timeout, ...options });
+        return res;
+      } catch (_) { /* continue to proxies */ }
+    }
+    // Try proxy services
+    for (const proxyFn of PROXY_SERVICES) {
+      try {
+        const proxyUrl = proxyFn(url);
+        const res = await axios.get(proxyUrl, { timeout: timeout + 5000, ...options });
+        return res;
+      } catch (_) { /* try next */ }
+    }
+    throw directErr;
+  }
 }
 
 // Fear & Greed
@@ -300,31 +330,104 @@ router.get('/fear-greed', async (req, res) => {
   }
 });
 
-// Funding Rate
+// Funding Rate - OKX primary (works from cloud IPs), Bybit/Binance fallback
 router.get('/funding/:symbol', async (req, res) => {
   try {
     const { symbol } = req.params;
+    const instId = symbol.replace('USDT', '-USDT-SWAP');
+
+    // Try OKX first (works from all IPs including cloud)
+    try {
+      const okxRes = await axios.get(`${OKX_API}/api/v5/public/funding-rate?instId=${instId}`, { timeout: 8000 });
+      const item = okxRes.data?.data?.[0];
+      if (item && item.fundingRate) {
+        return res.json({
+          rate: Number(item.fundingRate),
+          nextSettlement: Number(item.nextFundingTime),
+          intervalHours: 8,
+          source: 'OKX'
+        });
+      }
+    } catch (_) { /* fall through */ }
+
+    // Try Bybit
+    try {
+      const bybitTicker = await axios.get(`${BYBIT_API}/v5/market/tickers?category=linear&symbol=${symbol}`, { timeout: 8000 });
+      const item = bybitTicker.data?.result?.list?.[0];
+      if (item && item.fundingRate) {
+        return res.json({
+          rate: Number(item.fundingRate),
+          nextSettlement: Number(item.nextFundingTime),
+          intervalHours: 8,
+          source: 'Bybit'
+        });
+      }
+    } catch (_) { /* fall through */ }
+
+    // Fallback to Binance
     const url = `${BINANCE_FAPI}/fapi/v1/premiumIndex?symbol=${symbol}`;
-    let response = await axios.get(url).catch(() => axios.get(proxiedGet(url)));
+    let response = await fetchWithFallbacks(url);
     res.json({
       rate: Number(response.data.lastFundingRate),
       nextSettlement: Number(response.data.nextFundingTime),
-      intervalHours: 8
+      intervalHours: 8,
+      source: 'Binance'
     });
   } catch (error) {
+    console.error('Error fetching funding:', error.message);
     res.status(500).json({ error: 'Failed to fetch funding' });
   }
 });
 
-// Long/Short Ratio - Aggregated account ratio from Binance
+// Long/Short Ratio - OKX primary (works from cloud IPs), Bybit/Binance fallback
 router.get('/longshort/:symbol', async (req, res) => {
   try {
     const { symbol } = req.params;
     const { period = '1d' } = req.query;
+    const instId = symbol.replace('USDT', '-USDT-SWAP');
+
+    // Try OKX first (top trader long/short ratio - works from cloud IPs)
+    try {
+      const okxRes = await axios.get(`${OKX_API}/api/v5/rubik/stat/contracts/long-short-account-ratio-contract-top-trader?instId=${instId}&period=5m`, { timeout: 8000 });
+      const data = okxRes.data?.data;
+      if (Array.isArray(data) && data.length > 0) {
+        const latest = data[0]; // [timestamp, ratio]
+        const longShortRatio = Number(latest[1]);
+        const longAccount = longShortRatio / (1 + longShortRatio);
+        const shortAccount = 1 / (1 + longShortRatio);
+        return res.json({
+          symbol,
+          longShortRatio,
+          longAccount,
+          shortAccount,
+          timestamp: Number(latest[0]),
+          source: 'OKX'
+        });
+      }
+    } catch (_) { /* fall through */ }
+
+    // Try Bybit
+    try {
+      const bybitRes = await axios.get(`${BYBIT_API}/v5/market/account-ratio?category=linear&symbol=${symbol}&period=${period}&limit=1`, { timeout: 8000 });
+      const item = bybitRes.data?.result?.list?.[0];
+      if (item) {
+        const buyRatio = Number(item.buyRatio);
+        const sellRatio = Number(item.sellRatio);
+        const longShortRatio = sellRatio > 0 ? (buyRatio / sellRatio) : 1;
+        return res.json({
+          symbol,
+          longShortRatio,
+          longAccount: buyRatio,
+          shortAccount: sellRatio,
+          timestamp: Number(item.timestamp),
+          source: 'Bybit'
+        });
+      }
+    } catch (_) { /* fall through */ }
+
+    // Fallback to Binance
     const url = `${BINANCE_FAPI}/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=${period}`;
-    let response = await axios.get(url, { timeout: 10000 }).catch(() =>
-      axios.get(proxiedGet(url), { timeout: 15000 })
-    );
+    let response = await fetchWithFallbacks(url);
 
     const data = response.data;
     if (!Array.isArray(data) || data.length === 0) {
@@ -346,15 +449,54 @@ router.get('/longshort/:symbol', async (req, res) => {
   }
 });
 
-// Taker Buy/Sell Ratio from Binance
+// Taker Buy/Sell Ratio - OKX primary (works from cloud IPs), Bybit/Binance fallback
 router.get('/taker-ratio/:symbol', async (req, res) => {
   try {
     const { symbol } = req.params;
     const { period = '1d' } = req.query;
+    const instId = symbol.replace('USDT', '-USDT-SWAP');
+
+    // Try OKX first (taker volume ratio - works from cloud IPs)
+    try {
+      const okxRes = await axios.get(`${OKX_API}/api/v5/rubik/stat/taker-volume-contract?instId=${instId}&period=5m`, { timeout: 8000 });
+      const data = okxRes.data?.data;
+      if (Array.isArray(data) && data.length > 0) {
+        const latest = data[0]; // [timestamp, sellVol, buyVol, ratio]
+        const sellVol = Number(latest[1]);
+        const buyVol = Number(latest[2]);
+        const buySellRatio = sellVol > 0 ? buyVol / sellVol : 1;
+        return res.json({
+          symbol,
+          buySellRatio,
+          buyVol,
+          sellVol,
+          timestamp: Number(latest[0]),
+          source: 'OKX'
+        });
+      }
+    } catch (_) { /* fall through */ }
+
+    // Try Bybit
+    try {
+      const bybitRes = await axios.get(`${BYBIT_API}/v5/market/account-ratio?category=linear&symbol=${symbol}&period=${period}&limit=1`, { timeout: 8000 });
+      const item = bybitRes.data?.result?.list?.[0];
+      if (item) {
+        const buyRatio = Number(item.buyRatio);
+        const sellRatio = Number(item.sellRatio);
+        return res.json({
+          symbol,
+          buySellRatio: buyRatio > 0 && sellRatio > 0 ? (buyRatio / sellRatio) : 1,
+          buyVol: buyRatio,
+          sellVol: sellRatio,
+          timestamp: Number(item.timestamp),
+          source: 'Bybit'
+        });
+      }
+    } catch (_) { /* fall through */ }
+
+    // Fallback to Binance
     const url = `${BINANCE_FAPI}/futures/data/takerlongshortRatio?symbol=${symbol}&period=${period}`;
-    let response = await axios.get(url, { timeout: 10000 }).catch(() =>
-      axios.get(proxiedGet(url), { timeout: 15000 })
-    );
+    let response = await fetchWithFallbacks(url);
 
     const data = response.data;
     if (!Array.isArray(data) || data.length === 0) {
@@ -373,6 +515,60 @@ router.get('/taker-ratio/:symbol', async (req, res) => {
   } catch (error) {
     console.error('Error fetching taker ratio:', error.message);
     res.status(500).json({ error: 'Failed to fetch taker ratio' });
+  }
+});
+
+// Open Interest - aggregated from Bybit (primary) + OKX
+router.get('/open-interest/:symbol', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    let oiUsd = 0;
+    const sources = [];
+
+    // Bybit OI
+    try {
+      const bybitRes = await axios.get(`${BYBIT_API}/v5/market/tickers?category=linear&symbol=${symbol}`, { timeout: 8000 });
+      const item = bybitRes.data?.result?.list?.[0];
+      if (item && item.openInterest) {
+        // openInterest is in coin units, multiply by mark price for USD
+        const oiCoins = Number(item.openInterest);
+        const markPrice = Number(item.markPrice || item.lastPrice || 0);
+        oiUsd += oiCoins * markPrice;
+        sources.push('Bybit');
+      }
+    } catch (_) { /* skip */ }
+
+    // OKX OI
+    try {
+      const instId = symbol.replace('USDT', '-USDT-SWAP');
+      const okxRes = await axios.get(`${OKX_API}/api/v5/public/open-interest?instType=SWAP&instId=${instId}`, { timeout: 8000 });
+      const item = okxRes.data?.data?.[0];
+      if (item && item.oiCcy) {
+        // OKX returns oi in coin units, get price from Bybit or use 0
+        const markPrice = oiUsd > 0 ? oiUsd / Number(item.oiCcy || 1) : 0;
+        // Use oiCcy * approximate price
+        const okxOiCoins = Number(item.oiCcy);
+        // Get price from last known
+        try {
+          const priceRes = await axios.get(`${OKX_API}/api/v5/market/ticker?instId=${instId}`, { timeout: 5000 });
+          const price = Number(priceRes.data?.data?.[0]?.last || 0);
+          if (price > 0) {
+            oiUsd += okxOiCoins * price;
+            sources.push('OKX');
+          }
+        } catch (_) { /* skip price fetch */ }
+      }
+    } catch (_) { /* skip */ }
+
+    res.json({
+      symbol,
+      oiUsd,
+      history: [],
+      sources
+    });
+  } catch (error) {
+    console.error('Error fetching open interest:', error.message);
+    res.status(500).json({ error: 'Failed to fetch open interest' });
   }
 });
 
@@ -466,7 +662,7 @@ router.get('/btc-social', async (req, res) => {
       params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/coins/bitcoin?${params.toString()}`;
-    let response = await axios.get(url).catch(() => axios.get(proxiedGet(url)));
+    let response = await fetchWithFallbacks(url);
     const result = {
       bullishPct: Number(response.data.sentiment_votes_up_percentage ?? 0),
       bearishPct: Number(response.data.sentiment_votes_down_percentage ?? 0)
@@ -496,11 +692,7 @@ router.get('/blockchain-stats', async (req, res) => {
   try {
     // Helper to fetch with CORS proxy fallback
     const fetchWithFallback = async (url, options = {}) => {
-      try {
-        return await axios.get(url, { timeout: 10000, ...options });
-      } catch {
-        return await axios.get(proxiedGet(url), { timeout: 15000, ...options });
-      }
+      return await fetchWithFallbacks(url, { timeout: 10000, ...options });
     };
 
     // Primary: Use /stats endpoint for all current data
@@ -560,9 +752,7 @@ router.get('/hashrate-chart', async (req, res) => {
     const timespan = timespanMap[days] || '30days';
 
     const url = `https://api.blockchain.info/charts/hash-rate?timespan=${timespan}&format=json&sampled=true`;
-    const response = await axios.get(url, { timeout: 15000 }).catch(() =>
-      axios.get(proxiedGet(url), { timeout: 20000 })
-    );
+    const response = await fetchWithFallbacks(url, { timeout: 15000 });
 
     const values = response.data?.values || [];
     const data = values.map(point => ({
@@ -599,9 +789,7 @@ router.get('/difficulty-chart', async (req, res) => {
     const timespan = timespanMap[days] || '30days';
 
     const url = `https://api.blockchain.info/charts/difficulty?timespan=${timespan}&format=json&sampled=true`;
-    const response = await axios.get(url, { timeout: 15000 }).catch(() =>
-      axios.get(proxiedGet(url), { timeout: 20000 })
-    );
+    const response = await fetchWithFallbacks(url, { timeout: 15000 });
 
     const values = response.data?.values || [];
     const data = values.map(point => ({
@@ -636,9 +824,7 @@ router.get('/coingecko-global', async (req, res) => {
       params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/global?${params.toString()}`;
-    const response = await axios.get(url, { timeout: 10000 }).catch(() => 
-      axios.get(proxiedGet(url), { timeout: 15000 })
-    );
+    const response = await fetchWithFallbacks(url, { timeout: 10000 });
     
     setCached(cacheKey, response.data, 60000); // Cache for 60 seconds
     res.json(response.data);
@@ -669,9 +855,7 @@ router.get('/coingecko-coin/:id', async (req, res) => {
       params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/coins/${id}?${params.toString()}`;
-    const response = await axios.get(url, { timeout: 10000 }).catch(() => 
-      axios.get(proxiedGet(url), { timeout: 15000 })
-    );
+    const response = await fetchWithFallbacks(url, { timeout: 10000 });
     
     setCached(cacheKey, response.data, 60000); // Cache for 60 seconds
     res.json(response.data);
@@ -700,9 +884,7 @@ router.get('/volume-chart/:id', async (req, res) => {
       params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?${params.toString()}`;
-    const response = await axios.get(url, { timeout: 15000 }).catch(() =>
-      axios.get(proxiedGet(url), { timeout: 20000 })
-    );
+    const response = await fetchWithFallbacks(url, { timeout: 15000 });
     
     // Response contains: prices: [[timestamp, price], ...], market_caps: [...], total_volumes: [[timestamp, volume], ...]
     const volumes = response.data?.total_volumes || [];
@@ -833,7 +1015,7 @@ router.get('/coingecko-markets', async (req, res) => {
       params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/coins/markets?${params.toString()}`;
-    const response = await axios.get(url).catch(() => axios.get(proxiedGet(url)));
+    const response = await fetchWithFallbacks(url);
     res.json(response.data);
   } catch (error) {
     console.error('Error fetching coingecko markets:', error.message);
@@ -1172,7 +1354,7 @@ router.get('/categories', async (req, res) => {
       params.append('x_cg_demo_api_key', getCOINGECKO_API_KEY());
     }
     const url = `https://api.coingecko.com/api/v3/coins/categories?${params.toString()}`;
-    const response = await axios.get(url).catch(() => axios.get(proxiedGet(url)));
+    const response = await fetchWithFallbacks(url);
 
     // Filter and format relevant categories
     const relevantCategories = response.data

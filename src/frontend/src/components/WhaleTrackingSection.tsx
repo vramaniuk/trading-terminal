@@ -117,7 +117,7 @@ function useLargeTransactions(): LargeTransactionsState {
   });
 
   const fetchLargeTransactions = useCallback(async () => {
-    const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+    const BACKEND_API = import.meta.env.BACKEND_API || "";
     try {
       const res = await fetch(
         `${BACKEND_API}/api/analysis/btc/large-transactions?min_amount=1&limit=10`
@@ -158,7 +158,7 @@ function useEthLargeTransactions(): EthLargeTransactionsState {
   });
 
   const fetchEthLargeTransactions = useCallback(async () => {
-    const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+    const BACKEND_API = import.meta.env.BACKEND_API || "";
     try {
       const res = await fetch(
         `${BACKEND_API}/api/analysis/eth/large-transactions?min_value=1&limit=10`
@@ -201,7 +201,7 @@ function useActiveAddresses(): ActiveAddressesState {
   });
 
   const fetchActiveAddresses = useCallback(async () => {
-    const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+    const BACKEND_API = import.meta.env.BACKEND_API || "";
     try {
       const [btcRes, ethRes] = await Promise.all([
         fetch(
@@ -267,7 +267,7 @@ function useWhaleWallets(): WhaleWalletState {
   });
 
   const fetchWhaleWallets = useCallback(async () => {
-    const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+    const BACKEND_API = import.meta.env.BACKEND_API || "";
     try {
       const res = await fetch(
         `${BACKEND_API}/api/analysis/btc/large-transactions?min_amount=10&limit=50`

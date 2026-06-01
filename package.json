@@ -15,11 +15,18 @@
     "build": "pnpm build:frontend && pnpm build:backend",
     "typecheck": "pnpm -r --if-present run typecheck",
     "check": "pnpm -r --if-present run check",
-    "fix": "pnpm -r --if-present run fix"
+    "fix": "pnpm -r --if-present run fix",
+    "deploy:netlify": "pnpm build:frontend && cd src/frontend && npx netlify-cli deploy --prod --no-build --dir $(pwd)/dist --functions $(pwd)/netlify/functions"
   },
   "devDependencies": {
     "sharp": "^0.34.4",
     "concurrently": "^8.2.2"
   },
-  "dependencies": {}
+  "dependencies": {
+    "express": "^4.18.2",
+    "serverless-http": "^3.2.0",
+    "cors": "^2.8.5",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1"
+  }
 }

@@ -12,7 +12,7 @@ export function useHashrateChart(days: number) {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+      const BACKEND_API = import.meta.env.BACKEND_API || "";
       const res = await fetch(`${BACKEND_API}/api/analysis/hashrate-chart?days=${days}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const result = await res.json();
@@ -47,7 +47,7 @@ export function useDifficultyChart(days: number) {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+      const BACKEND_API = import.meta.env.BACKEND_API || "";
       const res = await fetch(`${BACKEND_API}/api/analysis/difficulty-chart?days=${days}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const result = await res.json();

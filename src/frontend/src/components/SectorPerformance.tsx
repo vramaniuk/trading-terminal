@@ -32,7 +32,7 @@ export function SectorPerformance() {
     setLoading(true);
     setError(false);
     try {
-      const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+      const BACKEND_API = import.meta.env.BACKEND_API || "";
       const res = await fetch(`${BACKEND_API}/api/analysis/categories`);
       if (!res.ok) throw new Error("Failed to fetch data");
       const data = await res.json();

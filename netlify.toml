@@ -1,0 +1,22 @@
+[build]
+  command = "cd src/frontend && pnpm build"
+  publish = "src/frontend/dist"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["src/backend/src/**"]
+
+# Proxy all /api/* requests to the serverless function
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/api/:splat"
+  status = 200
+
+# SPA: serve index.html for all other routes
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[build.environment]
+  NODE_VERSION = "24"

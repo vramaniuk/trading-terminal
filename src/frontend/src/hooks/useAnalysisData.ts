@@ -94,7 +94,7 @@ export const defaultOI: OpenInterestState = {
   error: false,
 };
 
-const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+const BACKEND_API = import.meta.env.BACKEND_API || "";
 
 // ---- Fear & Greed ----
 export async function fetchFearGreed(): Promise<FearGreedState> {

@@ -1,0 +1,58 @@
+redirectsOrigin = "config"
+plugins = []
+functionsDirectory = "/home/user07/WebstormProjects/trading-terminal/src/frontend/netlify/functions"
+functionsDirectoryOrigin = "config"
+headers = []
+
+[functions]
+
+[functions."*"]
+included_files = ["src/backend/src/**"]
+node_bundler = "esbuild"
+
+[build]
+publish = "/home/user07/WebstormProjects/trading-terminal/src/frontend/src/frontend/dist"
+publishOrigin = "config"
+commandOrigin = "config"
+base = "/home/user07/WebstormProjects/trading-terminal/src/frontend"
+command = "cd src/frontend && pnpm build"
+functions = "/home/user07/WebstormProjects/trading-terminal/src/frontend/netlify/functions"
+
+[build.environment]
+NODE_VERSION = "24"
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[[redirects]]
+from = "/api/*"
+to = "/.netlify/functions/api/api/:splat"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]

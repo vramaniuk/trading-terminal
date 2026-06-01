@@ -310,7 +310,7 @@ function useDerivativesData(): DerivativesData {
         }
 
         // Fetch market cap and volume from backend (CoinGecko)
-        const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+        const BACKEND_API = import.meta.env.BACKEND_API || "";
         let btcCap: number | null = null;
         let ethCap: number | null = null;
         let btcVol: number | null = null;
@@ -844,7 +844,7 @@ function useSentimentData(symbol: string) {
   const mountedRef = useRef(true);
 
   const fetch = useCallback(async () => {
-    const BACKEND_API = import.meta.env.BACKEND_API || "http://localhost:3001";
+    const BACKEND_API = import.meta.env.BACKEND_API || "";
 
     try {
       const recRes = await window.fetch(`${BACKEND_API}/api/analysis/recommendations/${symbol}`);
