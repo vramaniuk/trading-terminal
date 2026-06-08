@@ -284,32 +284,53 @@ function useDerivativesData(): DerivativesData {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch prices from dzengi.com public API
-        const dzengiRes = await fetch("https://api-adapter.dzengi.com/api/v1/ticker/24hr");
+        // Fetch BTC and ETH prices individually from dzengi.com public API
+        // Note: The bulk /ticker/24hr endpoint doesn't include crypto symbols
         let btcPrice: number | null = null;
         let ethPrice: number | null = null;
         let btcChange24h: number | null = null;
         let ethChange24h: number | null = null;
 
-        if (dzengiRes.ok) {
-          const tickers = await dzengiRes.json() as Array<{
+        const [btcRes, ethRes] = await Promise.all([
+          fetch("https://api-adapter.dzengi.com/api/v1/ticker/24hr?symbol=BTC/USD_LEVERAGE"),
+          fetch("https://api-adapter.dzengi.com/api/v1/ticker/24hr?symbol=ETH/USD_LEVERAGE"),
+        ]);
+
+        if (btcRes.ok) {
+          const btcTicker = await btcRes.json() as {
             symbol: string;
             lastPrice?: string;
+            openPrice?: string;
             priceChangePercent?: string;
-          }>;
-
-          // Find BTC/USD_LEVERAGE for BTC price
-          const btcTicker = tickers.find(t => t.symbol === "BTC/USD_LEVERAGE");
-          if (btcTicker) {
-            btcPrice = Number.parseFloat(btcTicker.lastPrice ?? "0");
-            btcChange24h = Number.parseFloat(btcTicker.priceChangePercent ?? "0");
+          };
+          if (btcTicker.lastPrice) {
+            btcPrice = Number.parseFloat(btcTicker.lastPrice);
+            // Calculate 24h change from openPrice if priceChangePercent not available
+            if (btcTicker.priceChangePercent) {
+              btcChange24h = Number.parseFloat(btcTicker.priceChangePercent);
+            } else if (btcTicker.openPrice && btcPrice > 0) {
+              const openPrice = Number.parseFloat(btcTicker.openPrice);
+              btcChange24h = ((btcPrice - openPrice) / openPrice) * 100;
+            }
           }
+        }
 
-          // Find ETH/USD_LEVERAGE for ETH price
-          const ethTicker = tickers.find(t => t.symbol === "ETH/USD_LEVERAGE");
-          if (ethTicker) {
-            ethPrice = Number.parseFloat(ethTicker.lastPrice ?? "0");
-            ethChange24h = Number.parseFloat(ethTicker.priceChangePercent ?? "0");
+        if (ethRes.ok) {
+          const ethTicker = await ethRes.json() as {
+            symbol: string;
+            lastPrice?: string;
+            openPrice?: string;
+            priceChangePercent?: string;
+          };
+          if (ethTicker.lastPrice) {
+            ethPrice = Number.parseFloat(ethTicker.lastPrice);
+            // Calculate 24h change from openPrice if priceChangePercent not available
+            if (ethTicker.priceChangePercent) {
+              ethChange24h = Number.parseFloat(ethTicker.priceChangePercent);
+            } else if (ethTicker.openPrice && ethPrice > 0) {
+              const openPrice = Number.parseFloat(ethTicker.openPrice);
+              ethChange24h = ((ethPrice - openPrice) / openPrice) * 100;
+            }
           }
         }
 
