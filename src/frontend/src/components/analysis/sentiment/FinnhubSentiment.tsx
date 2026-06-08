@@ -14,17 +14,23 @@ interface RecommendationPeriod {
 }
 
 
+interface StockPriceData {
+  price: number | null;
+  change24h: number | null;
+}
+
 const CRYPTO_PROXIES = [
-  { symbol: "MSTR", name: "MicroStrategy" },
-  { symbol: "COIN", name: "Coinbase" },
-  { symbol: "HOOD", name: "Robinhood" },
-  { symbol: "AMZN", name: "Amazon" },
-  { symbol: "NVDA", name: "Nvidia" },
+  { symbol: "MSTR", name: "MicroStrategy", dzengiSymbol: null as string | null },
+  { symbol: "COIN", name: "Coinbase", dzengiSymbol: "COIN" },
+  { symbol: "HOOD", name: "Robinhood", dzengiSymbol: "HOOD" },
+  { symbol: "AMZN", name: "Amazon", dzengiSymbol: "AMZN" },
+  { symbol: "NVDA", name: "Nvidia", dzengiSymbol: "NVDA" },
 ];
 
-function useSentimentData(symbol: string) {
+function useSentimentData(symbol: string, dzengiSymbol: string | null) {
   const [state, setState] = useState({
     recommendations: [] as RecommendationPeriod[],
+    priceData: { price: null, change24h: null } as StockPriceData,
     loading: true,
   });
   const mountedRef = useRef(true);
@@ -32,26 +38,62 @@ function useSentimentData(symbol: string) {
   const fetchData = useCallback(async () => {
     const BACKEND_API = import.meta.env.BACKEND_API || "";
     try {
+      // Fetch recommendations
       const recRes = await window.fetch(`${BACKEND_API}/api/analysis/recommendations/${symbol}`);
+      let recommendations: RecommendationPeriod[] = [];
       if (recRes.ok) {
         const recData = await recRes.json();
-        if (mountedRef.current) setState((prev) => ({ ...prev, recommendations: recData.slice(0, 4), loading: false }));
+        recommendations = recData.slice(0, 4);
       }
-    } catch {}
-  }, [symbol]);
+
+      // Fetch price from backend proxy if available
+      let priceData: StockPriceData = { price: null, change24h: null };
+      if (dzengiSymbol) {
+        const priceRes = await window.fetch(
+          `${BACKEND_API}/api/analysis/ticker/${encodeURIComponent(dzengiSymbol)}`
+        );
+        if (priceRes.ok) {
+          const priceJson = (await priceRes.json()) as {
+            lastPrice?: string;
+            openPrice?: string;
+            priceChangePercent?: string;
+          };
+          if (priceJson.lastPrice) {
+            const price = Number.parseFloat(priceJson.lastPrice);
+            let change24h: number | null = null;
+            if (priceJson.priceChangePercent) {
+              change24h = Number.parseFloat(priceJson.priceChangePercent);
+            } else if (priceJson.openPrice && price > 0) {
+              const openPrice = Number.parseFloat(priceJson.openPrice);
+              change24h = ((price - openPrice) / openPrice) * 100;
+            }
+            priceData = { price, change24h };
+          }
+        }
+      }
+
+      if (mountedRef.current) {
+        setState({ recommendations, priceData, loading: false });
+      }
+    } catch {
+      if (mountedRef.current) {
+        setState((prev) => ({ ...prev, loading: false }));
+      }
+    }
+  }, [symbol, dzengiSymbol]);
 
   useEffect(() => {
     mountedRef.current = true;
     fetchData();
-    const timer = setInterval(fetchData, 5 * 60_000);
+    const timer = setInterval(fetchData, 60_000);
     return () => { mountedRef.current = false; clearInterval(timer); };
   }, [fetchData]);
 
   return state;
 }
 
-export function AnalystRecommendations({ symbol, name }: { symbol: string; name: string }) {
-  const { recommendations, loading } = useSentimentData(symbol);
+export function AnalystRecommendations({ symbol, name, dzengiSymbol }: { symbol: string; name: string; dzengiSymbol: string | null }) {
+  const { recommendations, priceData, loading } = useSentimentData(symbol, dzengiSymbol);
   const latest = recommendations[0];
   const total = latest ? latest.strongBuy + latest.buy + latest.hold + latest.sell + latest.strongSell : 0;
   const bullishPct = total > 0 ? ((latest?.strongBuy || 0) + (latest?.buy || 0)) / total * 100 : 0;
@@ -69,7 +111,21 @@ export function AnalystRecommendations({ symbol, name }: { symbol: string; name:
             <div className="text-[10px] font-mono" style={{ color: C_DIM }}>{symbol} · Wall Street</div>
           </div>
         </div>
-        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "oklch(0.785 0.135 200 / 0.10)", color: C_CYAN, border: "1px solid oklch(0.785 0.135 200 / 0.25)" }}>Finnhub</span>
+        {/* Price or Finnhub badge */}
+        {!loading && priceData.price != null ? (
+          <div className="text-right">
+            <div className="text-xs font-mono font-semibold" style={{ color: C_FG }}>
+              ${priceData.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            {priceData.change24h != null && (
+              <div className="text-[9px] font-mono" style={{ color: priceData.change24h >= 0 ? C_GREEN : C_RED }}>
+                {priceData.change24h >= 0 ? "+" : ""}{priceData.change24h.toFixed(2)}%
+              </div>
+            )}
+          </div>
+        ) : (
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "oklch(0.785 0.135 200 / 0.10)", color: C_CYAN, border: "1px solid oklch(0.785 0.135 200 / 0.25)" }}>Finnhub</span>
+        )}
       </div>
       {loading ? (
         <Skeleton className="h-16 w-full rounded-lg" style={{ background: "oklch(1 0 0 / 0.06)" }} />
@@ -109,7 +165,7 @@ export function FinnhubSentimentSection() {
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
         {CRYPTO_PROXIES.map((proxy) => (
-          <AnalystRecommendations key={proxy.symbol} symbol={proxy.symbol} name={proxy.name} />
+          <AnalystRecommendations key={proxy.symbol} symbol={proxy.symbol} name={proxy.name} dzengiSymbol={proxy.dzengiSymbol} />
         ))}
       </div>
     </section>

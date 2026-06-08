@@ -862,18 +862,23 @@ interface RecommendationPeriod {
   strongSell: number;
 }
 
+interface StockPriceData {
+  price: number | null;
+  change24h: number | null;
+}
 
 const CRYPTO_PROXIES = [
-  { symbol: "MSTR", name: "MicroStrategy", type: "BTC" },
-  { symbol: "COIN", name: "Coinbase", type: "Crypto" },
-  { symbol: "HOOD", name: "Robinhood", type: "Crypto" },
-  { symbol: "AMZN", name: "Amazon", type: "Tech" },
-  { symbol: "NVDA", name: "Nvidia", type: "Tech" },
+  { symbol: "MSTR", name: "MicroStrategy", type: "BTC", dzengiSymbol: null },
+  { symbol: "COIN", name: "Coinbase", type: "Crypto", dzengiSymbol: "COIN" },
+  { symbol: "HOOD", name: "Robinhood", type: "Crypto", dzengiSymbol: "HOOD" },
+  { symbol: "AMZN", name: "Amazon", type: "Tech", dzengiSymbol: "AMZN" },
+  { symbol: "NVDA", name: "Nvidia", type: "Tech", dzengiSymbol: "NVDA" },
 ];
 
-function useSentimentData(symbol: string) {
+function useSentimentData(symbol: string, dzengiSymbol: string | null) {
   const [state, setState] = useState({
     recommendations: [] as RecommendationPeriod[],
+    priceData: { price: null, change24h: null } as StockPriceData,
     loading: true,
   });
   const mountedRef = useRef(true);
@@ -882,20 +887,54 @@ function useSentimentData(symbol: string) {
     const BACKEND_API = import.meta.env.BACKEND_API || "";
 
     try {
+      // Fetch recommendations
       const recRes = await window.fetch(`${BACKEND_API}/api/analysis/recommendations/${symbol}`);
+      let recommendations: RecommendationPeriod[] = [];
       if (recRes.ok) {
         const recData = await recRes.json();
-        if (mountedRef.current) {
-          setState((prev) => ({ ...prev, recommendations: recData.slice(0, 4), loading: false }));
+        recommendations = recData.slice(0, 4);
+      }
+
+      // Fetch price from backend proxy (avoids CORS)
+      let priceData: StockPriceData = { price: null, change24h: null };
+      if (dzengiSymbol) {
+        const priceRes = await window.fetch(
+          `${BACKEND_API}/api/analysis/ticker/${encodeURIComponent(dzengiSymbol)}`
+        );
+        if (priceRes.ok) {
+          const priceJson = (await priceRes.json()) as {
+            lastPrice?: string;
+            openPrice?: string;
+            priceChangePercent?: string;
+          };
+          if (priceJson.lastPrice) {
+            const price = Number.parseFloat(priceJson.lastPrice);
+            let change24h: number | null = null;
+            if (priceJson.priceChangePercent) {
+              change24h = Number.parseFloat(priceJson.priceChangePercent);
+            } else if (priceJson.openPrice && price > 0) {
+              const openPrice = Number.parseFloat(priceJson.openPrice);
+              change24h = ((price - openPrice) / openPrice) * 100;
+            }
+            priceData = { price, change24h };
+          }
         }
       }
-    } catch { /* ignore */ }
-  }, [symbol]);
+
+      if (mountedRef.current) {
+        setState({ recommendations, priceData, loading: false });
+      }
+    } catch {
+      if (mountedRef.current) {
+        setState((prev) => ({ ...prev, loading: false }));
+      }
+    }
+  }, [symbol, dzengiSymbol]);
 
   useEffect(() => {
     mountedRef.current = true;
     fetch();
-    const timer = setInterval(fetch, 5 * 60_000);
+    const timer = setInterval(fetch, 60_000); // Refresh every minute
     return () => { mountedRef.current = false; clearInterval(timer); };
   }, [fetch]);
 
@@ -920,7 +959,7 @@ export function SentimentSection() {
 }
 
 function SentimentCard({ proxy }: { proxy: typeof CRYPTO_PROXIES[0] }) {
-  const { recommendations, loading } = useSentimentData(proxy.symbol);
+  const { recommendations, priceData, loading } = useSentimentData(proxy.symbol, proxy.dzengiSymbol ?? null);
 
   // Calculate consensus from recommendations
   const latestRec = recommendations[0];
@@ -954,34 +993,55 @@ function SentimentCard({ proxy }: { proxy: typeof CRYPTO_PROXIES[0] }) {
       style={CARD_STYLE}
     >
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-          style={{
-            background:
-              proxy.type === "BTC"
-                ? "oklch(0.820 0.160 60 / 0.12)"
-                : proxy.type === "Crypto"
-                  ? "oklch(0.785 0.135 200 / 0.12)"
-                  : "oklch(0.620 0.140 280 / 0.12)",
-            color:
-              proxy.type === "BTC"
-                ? "oklch(0.820 0.160 60)"
-                : proxy.type === "Crypto"
-                  ? "oklch(0.785 0.135 200)"
-                  : "oklch(0.720 0.140 280)",
-          }}
-        >
-          <span className="text-xs font-bold">{proxy.symbol.slice(0, 2)}</span>
-        </div>
-        <div>
-          <div className="text-xs font-semibold" style={{ color: C_FG }}>
-            {proxy.name}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            style={{
+              background:
+                proxy.type === "BTC"
+                  ? "oklch(0.820 0.160 60 / 0.12)"
+                  : proxy.type === "Crypto"
+                    ? "oklch(0.785 0.135 200 / 0.12)"
+                    : "oklch(0.620 0.140 280 / 0.12)",
+              color:
+                proxy.type === "BTC"
+                  ? "oklch(0.820 0.160 60)"
+                  : proxy.type === "Crypto"
+                    ? "oklch(0.785 0.135 200)"
+                    : "oklch(0.720 0.140 280)",
+            }}
+          >
+            <span className="text-xs font-bold">{proxy.symbol.slice(0, 2)}</span>
           </div>
-          <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
-            {proxy.symbol} · {proxy.type}
+          <div>
+            <div className="text-xs font-semibold" style={{ color: C_FG }}>
+              {proxy.name}
+            </div>
+            <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
+              {proxy.symbol} · {proxy.type}
+            </div>
           </div>
         </div>
+        {/* Price badge */}
+        {!loading && priceData.price != null && (
+          <div className="text-right">
+            <div
+              className="text-xs font-mono font-semibold"
+              style={{ color: C_FG }}
+            >
+              ${priceData.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            {priceData.change24h != null && (
+              <div
+                className="text-[9px] font-mono"
+                style={{ color: priceData.change24h >= 0 ? C_GREEN : C_RED }}
+              >
+                {priceData.change24h >= 0 ? "+" : ""}{priceData.change24h.toFixed(2)}%
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Loading */}

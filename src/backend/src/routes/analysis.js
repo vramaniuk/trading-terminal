@@ -687,6 +687,17 @@ router.get('/tickers', async (req, res) => {
   }
 });
 
+// Individual ticker price (for stocks like COIN, HOOD, etc.)
+router.get('/ticker/:symbol', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const response = await axios.get(`https://api-adapter.dzengi.com/api/v1/ticker/24hr?symbol=${encodeURIComponent(symbol)}`);
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch ticker' });
+  }
+});
+
 // Blockchain stats - Single call to /stats endpoint with fallback to charts API
 router.get('/blockchain-stats', async (req, res) => {
   try {
