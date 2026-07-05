@@ -241,7 +241,9 @@ interface DerivativesData {
   longPct: number | null;
   shortPct: number | null;
   takerBuySellRatio: number | null;
-  putCallRatio: number | null;
+  gammaExposure: number | null;
+  maxPosGexStrike: number | null;
+  maxNegGexStrike: number | null;
   lsSource: string;
   takerSource: string;
   btcData: CoinVolumeData;
@@ -255,7 +257,9 @@ function useDerivativesData(): DerivativesData {
     longPct: null,
     shortPct: null,
     takerBuySellRatio: null,
-    putCallRatio: null,
+    gammaExposure: null,
+    maxPosGexStrike: null,
+    maxNegGexStrike: null,
     lsSource: "Binance",
     takerSource: "Binance",
     btcData: {
@@ -377,15 +381,17 @@ function useDerivativesData(): DerivativesData {
         let longPct: number | null = null;
         let shortPct: number | null = null;
         let takerBuySellRatio: number | null = null;
-        let putCallRatio: number | null = null;
+        let gammaExposure: number | null = null;
+        let maxPosGexStrike: number | null = null;
+        let maxNegGexStrike: number | null = null;
         let lsSource = "Binance";
         let takerSource = "Binance";
 
         try {
-          const [lsRes, takerRes, pcRes] = await Promise.all([
+          const [lsRes, takerRes, gexRes] = await Promise.all([
             fetch(`${BACKEND_API}/api/analysis/longshort/BTCUSDT?period=1d`),
             fetch(`${BACKEND_API}/api/analysis/taker-ratio/BTCUSDT?period=1d`),
-            fetch(`${BACKEND_API}/api/analysis/put-call-ratio/BTC`),
+            fetch(`${BACKEND_API}/api/analysis/gamma-exposure/BTC`),
           ]);
 
           if (lsRes.ok) {
@@ -414,13 +420,16 @@ function useDerivativesData(): DerivativesData {
             takerSource = takerData.source || "Binance";
           }
 
-          if (pcRes.ok) {
-            const pcData = await pcRes.json() as {
-              putCallRatioOpenInterest: number;
-              putCallRatioVolume24hr: number;
-              timestamp: number;
+          if (gexRes.ok) {
+            const gexData = await gexRes.json() as {
+              totalGammaExposure: number;
+              maxPositiveGex: { strike: number; value: number };
+              maxNegativeGex: { strike: number; value: number };
+              interpretation: string;
             };
-            putCallRatio = pcData.putCallRatioVolume24hr;
+            gammaExposure = gexData.totalGammaExposure;
+            maxPosGexStrike = gexData.maxPositiveGex?.strike ?? null;
+            maxNegGexStrike = gexData.maxNegativeGex?.strike ?? null;
           }
         } catch (error) {
           console.warn("Failed to fetch derivatives ratios:", error);
@@ -432,7 +441,9 @@ function useDerivativesData(): DerivativesData {
           longPct,
           shortPct,
           takerBuySellRatio,
-          putCallRatio,
+          gammaExposure,
+          maxPosGexStrike,
+          maxNegGexStrike,
           lsSource,
           takerSource,
           btcData: {
@@ -527,19 +538,17 @@ export function DerivativesSection() {
     return { signal: "neutral", text: "Balanced buy/sell pressure" };
   };
 
-  const pcSignal = (): { signal: MetricCardProps["signal"]; text: string } => {
-    if (d.putCallRatio == null)
+  const gexSignal = (): { signal: MetricCardProps["signal"]; text: string } => {
+    if (d.gammaExposure == null)
       return { signal: "unavailable", text: "Data unavailable" };
-    if (d.putCallRatio > 1.0)
-      return { signal: "bearish", text: "More puts — hedging / fear dominant" };
-    if (d.putCallRatio < 0.6)
-      return { signal: "bullish", text: "More calls — bullish options flow" };
-    return { signal: "neutral", text: "Balanced options positioning" };
+    if (d.gammaExposure > 0)
+      return { signal: "neutral", text: "Net positive GEX — dampened volatility" };
+    return { signal: "warning", text: "Net negative GEX — amplified volatility" };
   };
 
   const ls = lsSignal();
   const ts = takerSignal();
-  const pc = pcSignal();
+  const gex = gexSignal();
 
   return (
     <section data-ocid="analysis.section.derivatives">
@@ -664,24 +673,86 @@ export function DerivativesSection() {
           badge={d.takerSource}
         />
 
-        {/* Put/Call Ratio */}
-        <MetricCard
-          label="Options Put/Call Ratio"
-          sublabel="BTC options volume (Amberdata)"
-          icon={<BarChart2 className="w-3.5 h-3.5" />}
-          loading={d.loading}
-          value={
-            d.putCallRatio != null ? d.putCallRatio.toFixed(3) : "Unavailable"
-          }
-          subtitle={
-            d.putCallRatio != null
-              ? `${d.putCallRatio > 1 ? "Puts dominant" : "Calls dominant"}`
-              : undefined
-          }
-          signal={pc.signal}
-          signalText={pc.text}
-          badge="Amberdata"
-        />
+        {/* Gamma Exposure (GEX) */}
+        <div
+          className="rounded-xl p-4 flex flex-col gap-2 min-w-0"
+          style={CARD_STYLE}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                style={{
+                  background: "oklch(0.785 0.135 200 / 0.12)",
+                  color: C_CYAN,
+                }}
+              >
+                <BarChart2 className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <div className="text-xs font-semibold" style={{ color: C_FG }}>
+                  Gamma Exposure
+                </div>
+                <div className="text-[10px] font-mono" style={{ color: C_DIM }}>
+                  BTC options — Deribit
+                </div>
+              </div>
+            </div>
+            <span
+              className="text-[10px] font-semibold shrink-0 px-2 py-0.5 rounded-full font-mono"
+              style={{
+                background: "oklch(0.785 0.135 200 / 0.10)",
+                color: C_CYAN,
+                border: "1px solid oklch(0.785 0.135 200 / 0.25)",
+              }}
+            >
+              Amberdata
+            </span>
+          </div>
+          {d.loading ? (
+            <Skeleton
+              className="h-8 w-28 rounded"
+              style={{ background: "oklch(1 0 0 / 0.06)" }}
+            />
+          ) : (
+            <div
+              className="font-mono font-bold text-lg"
+              style={{ color: d.gammaExposure != null && d.gammaExposure >= 0 ? C_GREEN : C_RED }}
+            >
+              {d.gammaExposure != null
+                ? `${d.gammaExposure > 0 ? "+" : ""}${(d.gammaExposure / 1000000).toFixed(1)}M Γ`
+                : "Unavailable"}
+            </div>
+          )}
+          {!d.loading && d.maxPosGexStrike != null && (
+            <div className="text-[10px] font-mono" style={{ color: C_GREEN }}>
+              ↑ Max: ${d.maxPosGexStrike.toLocaleString()}
+            </div>
+          )}
+          {!d.loading && d.maxNegGexStrike != null && (
+            <div className="text-[10px] font-mono" style={{ color: C_RED }}>
+              ↓ Min: ${d.maxNegGexStrike.toLocaleString()}
+            </div>
+          )}
+          {!d.loading && (
+            <div
+              className="text-[11px] font-semibold px-2 py-1 rounded-lg w-fit"
+              style={{
+                background:
+                  gex.signal === "warning"
+                    ? "oklch(0.820 0.160 90 / 0.10)"
+                    : "oklch(0.155 0.020 240)",
+                color:
+                  gex.signal === "warning" ? C_YELLOW : C_MID,
+              }}
+            >
+              {gex.text}
+            </div>
+          )}
+          <div className="text-[10px] italic" style={{ color: C_DIM }}>
+            {`Positive GEX = pin risk, Negative GEX = volatile`}
+          </div>
+        </div>
 
         {/* BTC Volume Card */}
         <div

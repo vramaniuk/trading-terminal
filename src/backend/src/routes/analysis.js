@@ -608,6 +608,88 @@ router.get('/put-call-ratio/:currency', async (req, res) => {
   }
 });
 
+// Gamma Exposure (GEX) by Strike - for identifying pin risk and volatility zones
+router.get('/gamma-exposure/:currency', async (req, res) => {
+  try {
+    const { currency } = req.params;
+    const apiKey = getAMBERDATA_API_KEY();
+
+    if (!apiKey) {
+      return res.status(503).json({ error: 'Amberdata API key not configured' });
+    }
+
+    // Fetch open interest with greeks from Amberdata
+    const url = `https://api.amberdata.com/markets/derivatives/analytics/aggregated/greeks?currency=${currency.toUpperCase()}&exchange=deribit`;
+    const response = await axios.get(url, {
+      headers: { 'x-api-key': apiKey },
+      timeout: 15000
+    });
+
+    const data = response.data?.payload?.data;
+    if (!Array.isArray(data) || data.length === 0) {
+      return res.status(404).json({ error: 'No gamma data available' });
+    }
+
+    // Calculate Gamma Exposure by strike
+    // GEX = Gamma * Open Interest * Contract Size * Spot Price
+    // Calls have positive gamma exposure, puts have negative
+    const gexByStrike = new Map();
+    let totalGex = 0;
+    let maxPositiveGex = { strike: 0, value: 0 };
+    let maxNegativeGex = { strike: 0, value: 0 };
+
+    for (const option of data) {
+      const strike = parseFloat(option.strikePrice);
+      const gamma = parseFloat(option.gamma || 0);
+      const oi = parseFloat(option.openInterest || 0);
+      const spot = parseFloat(option.underlyingPrice || 0);
+      const isCall = option.optionType === 'call';
+
+      if (!strike || !gamma || !oi || !spot) continue;
+
+      // GEX calculation: gamma * OI * spot (calls positive, puts negative)
+      const contractMultiplier = currency.toUpperCase() === 'BTC' ? 1 : 1; // Adjust if needed
+      const gex = gamma * oi * spot * contractMultiplier * (isCall ? 1 : -1);
+
+      const currentGex = gexByStrike.get(strike) || 0;
+      gexByStrike.set(strike, currentGex + gex);
+      totalGex += gex;
+    }
+
+    // Find max positive and negative GEX strikes
+    const sortedStrikes = Array.from(gexByStrike.entries())
+      .sort((a, b) => b[1] - a[1]); // Sort by GEX desc
+
+    if (sortedStrikes.length > 0) {
+      maxPositiveGex = { strike: sortedStrikes[0][0], value: sortedStrikes[0][1] };
+      maxNegativeGex = { strike: sortedStrikes[sortedStrikes.length - 1][0], value: sortedStrikes[sortedStrikes.length - 1][1] };
+    }
+
+    // Sort by strike for chart data
+    const chartData = Array.from(gexByStrike.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([strike, gex]) => ({ strike, gex }));
+
+    res.json({
+      currency: currency.toUpperCase(),
+      exchange: 'deribit',
+      spotPrice: data[0]?.underlyingPrice,
+      totalGammaExposure: totalGex,
+      maxPositiveGex,
+      maxNegativeGex,
+      chartData,
+      interpretation: totalGex > 0
+        ? 'Net positive gamma - dealers hedge by selling rallies/buying dips (dampens volatility)'
+        : 'Net negative gamma - dealers hedge by buying rallies/selling dips (amplifies volatility)',
+      timestamp: new Date().toISOString(),
+      source: 'Amberdata'
+    });
+  } catch (error) {
+    console.error('Error fetching gamma exposure:', error.message);
+    res.status(500).json({ error: 'Failed to fetch gamma exposure' });
+  }
+});
+
 // Finnhub Analyst Recommendations
 router.get('/recommendations/:symbol', async (req, res) => {
   try {
